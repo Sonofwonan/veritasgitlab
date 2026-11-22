@@ -317,7 +317,7 @@ async function computePostingPreview(
   input: z.infer<typeof createPostingSchema>,
 ) {
   const { rows: clientRows } = await client.query(
-    `SELECT id, name, email, display_currency AS "displayCurrency" FROM users WHERE id = $1`,
+    `SELECT id, name, email FROM users WHERE id = $1`,
     [input.clientUserId],
   );
   const clientUser = clientRows[0];
@@ -433,7 +433,8 @@ export function registerAdminLedgerRoutes(
       return void res.status(err.status).json({ message: err.message });
     }
     console.error("[admin-ledger]", err);
-    return void res.status(500).json({ message: fallbackMessage });
+    const codeHint = typeof err?.code === "string" && /^[0-9A-Z]{5}$/.test(err.code) ? ` (DB ${err.code})` : "";
+    return void res.status(500).json({ message: `${fallbackMessage}${codeHint}` });
   };
 
   // List accounts for a client (used by Create Posting form)
