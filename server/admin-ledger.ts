@@ -326,7 +326,7 @@ async function computePostingPreview(
   const accountIds = [input.fromAccountId, input.toAccountId].filter((id): id is number => id != null);
   const { rows: accountRows } = await client.query(
     `SELECT a.id, a.user_id AS "userId", a.account_number AS "accountNumber", a.account_type AS "accountType",
-       a.display_name AS "displayName", COALESCE(a.balance, 0)::text AS "balance", u.name AS "ownerName", u.email AS "ownerEmail"
+       a.display_name AS "displayName", COALESCE(a.balance::text, '0') AS "balance", u.name AS "ownerName", u.email AS "ownerEmail"
      FROM accounts a
      JOIN users u ON u.id = a.user_id
      WHERE a.id = ANY($1::int[])`,
@@ -433,7 +433,9 @@ export function registerAdminLedgerRoutes(
       return void res.status(err.status).json({ message: err.message });
     }
     console.error("[admin-ledger]", err);
-    const codeHint = typeof err?.code === "string" && /^[0-9A-Z]{5}$/.test(err.code) ? ` (DB ${err.code})` : "";
+    const codeHint = typeof err?.code === "string" && /^[0-9A-Z_]{2,20}$/i.test(err.code)
+      ? ` (DB ${err.code})`
+      : (typeof err?.name === "string" && err.name !== "Error" ? ` (${err.name})` : "");
     return void res.status(500).json({ message: `${fallbackMessage}${codeHint}` });
   };
 

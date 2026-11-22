@@ -291,13 +291,17 @@ export function AdminTransactions({ adminKey, currentStaff, allUsers }: AdminTra
 
   const previewMutation = useMutation({
     mutationFn: async () => {
+      const parsedDate = new Date(postingForm.effectiveDate);
+      if (!Number.isFinite(parsedDate.getTime())) {
+        throw new Error("Enter a valid effective date and time");
+      }
       const payload = {
         postingType: postingForm.postingType,
         clientUserId: Number(postingForm.clientUserId),
         fromAccountId: postingForm.postingType === "transfer" ? Number(postingForm.fromAccountId) : null,
         toAccountId: Number(postingForm.toAccountId),
         amount: postingForm.amount.trim(),
-        effectiveDate: new Date(postingForm.effectiveDate).toISOString(),
+        effectiveDate: parsedDate.toISOString(),
         reason: postingForm.reason.trim(),
         evidenceRef: postingForm.evidenceRef.trim(),
         description: postingForm.description.trim() || undefined,
@@ -306,8 +310,16 @@ export function AdminTransactions({ adminKey, currentStaff, allUsers }: AdminTra
         method: "POST",
         body: JSON.stringify(payload),
       });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data?.message || "Failed to generate preview");
+      const rawText = await r.text();
+      let data: any = null;
+      try {
+        data = rawText ? JSON.parse(rawText) : null;
+      } catch {
+        data = null;
+      }
+      if (!r.ok) {
+        throw new Error(data?.message || `Failed to generate preview (HTTP ${r.status})`);
+      }
       return { preview: data, payload };
     },
     onSuccess: ({ preview }) => {
@@ -795,8 +807,10 @@ export function AdminTransactions({ adminKey, currentStaff, allUsers }: AdminTra
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs uppercase tracking-wider text-slate-400 font-semibold">Client</label>
+                  <label htmlFor="posting-client" className="text-xs uppercase tracking-wider text-slate-400 font-semibold">Client</label>
                   <select
+                    id="posting-client"
+                    name="clientUserId"
                     value={postingForm.clientUserId}
                     onChange={(e) =>
                       setPostingForm(f => ({
@@ -819,8 +833,10 @@ export function AdminTransactions({ adminKey, currentStaff, allUsers }: AdminTra
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs uppercase tracking-wider text-slate-400 font-semibold">Effective Date & Time</label>
+                  <label htmlFor="posting-effective-date" className="text-xs uppercase tracking-wider text-slate-400 font-semibold">Effective Date & Time</label>
                   <Input
+                    id="posting-effective-date"
+                    name="effectiveDate"
                     type="datetime-local"
                     value={postingForm.effectiveDate}
                     onChange={(e) => setPostingForm(f => ({ ...f, effectiveDate: e.target.value }))}
@@ -831,8 +847,10 @@ export function AdminTransactions({ adminKey, currentStaff, allUsers }: AdminTra
 
                 {postingForm.postingType === "transfer" && (
                   <div className="space-y-1.5">
-                    <label className="text-xs uppercase tracking-wider text-slate-400 font-semibold">Source Account</label>
+                    <label htmlFor="posting-from-account" className="text-xs uppercase tracking-wider text-slate-400 font-semibold">Source Account</label>
                     <select
+                      id="posting-from-account"
+                      name="fromAccountId"
                       value={postingForm.fromAccountId}
                       onChange={(e) => setPostingForm(f => ({ ...f, fromAccountId: e.target.value }))}
                       disabled={!postingForm.clientUserId}
@@ -850,10 +868,12 @@ export function AdminTransactions({ adminKey, currentStaff, allUsers }: AdminTra
                 )}
 
                 <div className="space-y-1.5">
-                  <label className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
+                  <label htmlFor="posting-to-account" className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
                     Destination Account
                   </label>
                   <select
+                    id="posting-to-account"
+                    name="toAccountId"
                     value={postingForm.toAccountId}
                     onChange={(e) => setPostingForm(f => ({ ...f, toAccountId: e.target.value }))}
                     disabled={!postingForm.clientUserId}
@@ -873,8 +893,10 @@ export function AdminTransactions({ adminKey, currentStaff, allUsers }: AdminTra
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs uppercase tracking-wider text-slate-400 font-semibold">Amount (CAD)</label>
+                  <label htmlFor="posting-amount" className="text-xs uppercase tracking-wider text-slate-400 font-semibold">Amount (CAD)</label>
                   <Input
+                    id="posting-amount"
+                    name="amount"
                     type="text"
                     inputMode="decimal"
                     placeholder="e.g. 25000.00"
@@ -886,10 +908,12 @@ export function AdminTransactions({ adminKey, currentStaff, allUsers }: AdminTra
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
+                  <label htmlFor="posting-evidence" className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
                     Evidence / Reference
                   </label>
                   <Input
+                    id="posting-evidence"
+                    name="evidenceRef"
                     type="text"
                     placeholder="e.g. WIRE-2026-88412 / RBC Statement #44"
                     value={postingForm.evidenceRef}
@@ -900,10 +924,12 @@ export function AdminTransactions({ adminKey, currentStaff, allUsers }: AdminTra
                 </div>
 
                 <div className="md:col-span-2 space-y-1.5">
-                  <label className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
+                  <label htmlFor="posting-description" className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
                     Statement Description <span className="normal-case text-slate-500">(optional — shown in client history)</span>
                   </label>
                   <Input
+                    id="posting-description"
+                    name="description"
                     type="text"
                     placeholder="e.g. Inbound Wire Settlement"
                     value={postingForm.description}
@@ -914,10 +940,12 @@ export function AdminTransactions({ adminKey, currentStaff, allUsers }: AdminTra
                 </div>
 
                 <div className="md:col-span-2 space-y-1.5">
-                  <label className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
+                  <label htmlFor="posting-reason" className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
                     Audit Reason
                   </label>
                   <Textarea
+                    id="posting-reason"
+                    name="reason"
                     placeholder="Explain why this posting is being created and how the movement was verified…"
                     value={postingForm.reason}
                     onChange={(e) => setPostingForm(f => ({ ...f, reason: e.target.value }))}
@@ -925,6 +953,13 @@ export function AdminTransactions({ adminKey, currentStaff, allUsers }: AdminTra
                     data-testid="input-posting-reason"
                   />
                 </div>
+
+                {previewMutation.isError && (
+                  <div className="md:col-span-2 rounded-lg border border-red-500/40 bg-red-500/10 px-3.5 py-2.5 text-xs text-red-200 flex items-start gap-2" role="alert">
+                    <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                    <span>{(previewMutation.error as Error)?.message || "Failed to generate posting preview"}</span>
+                  </div>
+                )}
 
                 <div className="md:col-span-2 flex justify-end">
                   <Button
@@ -943,7 +978,7 @@ export function AdminTransactions({ adminKey, currentStaff, allUsers }: AdminTra
                     data-testid="button-preview-posting"
                   >
                     <FileCheck2 className="w-4 h-4 mr-1.5" />
-                    Review Before & After Summary
+                    {previewMutation.isPending ? "Generating Summary…" : "Review Before & After Summary"}
                   </Button>
                 </div>
               </div>

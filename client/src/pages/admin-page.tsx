@@ -196,8 +196,10 @@ function AdminLogin({ onLogin }: { onLogin: (session: AdminAuthSession) => void 
                 <form onSubmit={handleSubmit} className="space-y-4">
                   {effectiveMode === "bootstrap" && (
                     <div className="space-y-1.5">
-                      <label className="text-sm font-medium text-slate-300">Full Name (Audit Display Name)</label>
+                      <label htmlFor="admin-staff-display-name" className="text-sm font-medium text-slate-300">Full Name (Audit Display Name)</label>
                       <Input
+                        id="admin-staff-display-name"
+                        name="displayName"
                         value={displayName}
                         onChange={e => setDisplayName(e.target.value)}
                         placeholder="e.g. Morgan Vance"
@@ -210,8 +212,11 @@ function AdminLogin({ onLogin }: { onLogin: (session: AdminAuthSession) => void 
 
                   {effectiveMode !== "legacy" && (
                     <div className="space-y-1.5">
-                      <label className="text-sm font-medium text-slate-300">Staff Username</label>
+                      <label htmlFor="admin-staff-username" className="text-sm font-medium text-slate-300">Staff Username</label>
                       <Input
+                        id="admin-staff-username"
+                        name="username"
+                        autoComplete="username"
                         value={username}
                         onChange={e => setUsername(e.target.value)}
                         placeholder="e.g. morgan.vance"
@@ -223,7 +228,7 @@ function AdminLogin({ onLogin }: { onLogin: (session: AdminAuthSession) => void 
                   )}
 
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-slate-300">
+                    <label htmlFor="admin-login-password" className="text-sm font-medium text-slate-300">
                       {effectiveMode === "legacy"
                         ? "Configured Admin Password"
                         : effectiveMode === "staff"
@@ -232,6 +237,9 @@ function AdminLogin({ onLogin }: { onLogin: (session: AdminAuthSession) => void 
                     </label>
                     <div className="relative">
                       <Input
+                        id="admin-login-password"
+                        name="password"
+                        autoComplete="current-password"
                         type={showPassword ? "text" : "password"}
                         value={password}
                         onChange={e => setPassword(e.target.value)}
@@ -243,6 +251,7 @@ function AdminLogin({ onLogin }: { onLogin: (session: AdminAuthSession) => void 
                       <button
                         type="button"
                         onClick={() => setShowPassword(v => !v)}
+                        aria-label={showPassword ? "Hide password" : "Show password"}
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200"
                       >
                         {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
