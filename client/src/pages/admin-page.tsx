@@ -1,0 +1,1660 @@
+import { useState, useCallback } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useToast } from "@/hooks/use-toast";
+import {
+  Users, ArrowLeftRight, Clock, CheckCircle2,
+  XCircle, ShieldCheck, LogOut, Wallet, Eye, EyeOff,
+  RefreshCw, DollarSign, Activity, FileText, ChevronDown, ChevronUp, Building2,
+  Lock, Unlock, Snowflake, Copy, History, UserPlus, UserCheck, ShieldAlert, KeyRound
+} from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog as ShadDialog, DialogContent as ShadDialogContent, DialogHeader as ShadDialogHeader, DialogTitle as ShadDialogTitle, DialogFooter as ShadDialogFooter } from "@/components/ui/dialog";
+import { AdminFees } from "@/components/fees/admin-fees";
+import { formatCAD } from "@shared/fees";
+import { clientBalanceCurrency, formatBalance } from "@shared/balance-currency";
+import { ClientCurrencyPanel } from "@/components/admin/client-currency-panel";
+import { DebtRestrictionPanel } from "@/components/admin/debt-restriction-panel";
+import { HistoricalBalances } from "@/components/admin/historical-balances";
+import { AdminRecoveryRequests } from "@/components/admin/recovery-requests";
+import { AdminTransactions, type AdminStaff } from "@/components/admin/admin-transactions";
+import { destinationCountryName } from "@shared/institutional-destination";
+
+type AdminAuthSession = {
+  token: string;
+  staff: AdminStaff | null;
+  legacyKeyMode: boolean;
+};
+
+type AdminAuthStatus = {
+  configured: boolean;
+  bootstrapRequired: boolean;
+  envPasswordConfigured: boolean;
+  staffCount: number;
+};
+
+function fmt(amount: string | number) {
+  return formatCAD(amount);
+}
+
+function adminFetch(path: string, adminKey: string, options: RequestInit = {}) {
+  return fetch(path, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${adminKey}`,
+      "x-admin-key": adminKey,
+      ...(options.headers || {}),
+    },
+  });
+}
+
+// ─── Login Screen ─────────────────────────────────────────────────────────────
+function AdminLogin({ onLogin }: { onLogin: (session: AdminAuthSession) => void }) {
+  const [mode, setMode] = useState<"staff" | "enroll" | "legacy">("staff");
+  const [username, setUsername] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [password, setPassword] = useState("");
+  const [adminPassword, setAdminPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const { data: authStatus, isLoading: statusLoading } = useQuery<AdminAuthStatus>({
+    queryKey: ["/api/admin/auth/status"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/auth/status");
+      if (!res.ok) throw new Error("Unable to load administrator status");
+      return res.json();
+    },
+    staleTime: 0,
+  });
+
+  const effectiveMode: "bootstrap" | "staff" | "enroll" | "legacy" = authStatus?.bootstrapRequired
+    ? "bootstrap"
+    : authStatus && authStatus.staffCount === 0 && authStatus.envPasswordConfigured && mode === "staff"
+      ? "enroll"
+      : mode;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    try {
+      if (effectiveMode === "bootstrap") {
+        const res = await fetch("/api/admin/auth/bootstrap", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, displayName, password }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setError(data?.message || "Failed to create initial administrator.");
+          return;
+        }
+        onLogin({ token: data.token, staff: data.staff, legacyKeyMode: false });
+        return;
+      }
+
+      if (effectiveMode === "enroll") {
+        const res = await fetch("/api/admin/auth/enroll-with-master", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, displayName, password, adminPassword }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setError(data?.message || "Failed to enroll staff administrator.");
+          return;
+        }
+        onLogin({ token: data.token, staff: data.staff, legacyKeyMode: false });
+        return;
+      }
+
+      if (effectiveMode === "legacy") {
+        const res = await fetch("/api/admin/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setError(data?.message || "Incorrect admin credential.");
+          return;
+        }
+        onLogin({ token: password, staff: null, legacyKeyMode: true });
+        return;
+      }
+
+      const res = await fetch("/api/admin/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data?.message || "Invalid staff credentials.");
+        return;
+      }
+      onLogin({ token: data.token, staff: data.staff, legacyKeyMode: Boolean(data.legacyKeyMode) });
+    } catch {
+      setError("Connection error. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
+      <div className="w-full max-w-md">
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/20 border border-primary/30 mb-4">
+            <ShieldCheck className="w-8 h-8 text-primary" />
+          </div>
+          <h1 className="text-2xl font-bold text-white">Admin Portal</h1>
+          <p className="text-slate-400 mt-1 text-sm">Veritas Wealth · Dual-Control Administration</p>
+        </div>
+
+        <Card className="bg-slate-800/50 border-slate-700 backdrop-blur">
+          <CardContent className="pt-6 space-y-4">
+            {statusLoading ? (
+              <div className="flex items-center justify-center py-8 text-slate-400 text-sm">
+                <RefreshCw className="w-4 h-4 animate-spin mr-2" /> Checking administrator setup…
+              </div>
+            ) : (
+              <>
+                {effectiveMode === "bootstrap" ? (
+                  <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200 space-y-1">
+                    <p className="font-semibold flex items-center gap-1.5">
+                      <UserPlus className="w-3.5 h-3.5" /> Initial Staff Administrator Setup
+                    </p>
+                    <p className="text-amber-200/80">
+                      No admin credential is configured yet. Create the first individual staff administrator account to lock down the portal. After signing in, enroll a second staff admin for dual-control posting approvals.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5 p-1 rounded-lg bg-slate-900/60 border border-slate-700">
+                    {(authStatus?.staffCount ?? 0) > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => { setMode("staff"); setError(""); }}
+                        className={`flex-1 text-xs font-medium py-1.5 px-2.5 rounded-md transition-colors ${effectiveMode === "staff" ? "bg-primary text-white" : "text-slate-400 hover:text-white"}`}
+                      >
+                        Staff Sign In
+                      </button>
+                    )}
+                    {authStatus?.envPasswordConfigured && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => { setMode("enroll"); setError(""); }}
+                          className={`flex-1 text-xs font-medium py-1.5 px-2.5 rounded-md transition-colors ${effectiveMode === "enroll" ? "bg-primary text-white" : "text-slate-400 hover:text-white"}`}
+                        >
+                          Enroll Staff
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setMode("legacy"); setError(""); }}
+                          className={`flex-1 text-xs font-medium py-1.5 px-2.5 rounded-md transition-colors ${effectiveMode === "legacy" ? "bg-primary text-white" : "text-slate-400 hover:text-white"}`}
+                        >
+                          Admin Key
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {effectiveMode === "legacy" && (
+                  <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs text-amber-200 flex items-start gap-2">
+                    <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5 text-amber-300" />
+                    <span>
+                      Shared Admin Key mode grants portal access to enroll staff, but cannot approve or post money movements until you sign in as an identified staff member.
+                    </span>
+                  </div>
+                )}
+
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  {(effectiveMode === "bootstrap" || effectiveMode === "enroll") && (
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium text-slate-300">Full Name (Audit Display Name)</label>
+                      <Input
+                        value={displayName}
+                        onChange={e => setDisplayName(e.target.value)}
+                        placeholder="e.g. Morgan Vance"
+                        className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"
+                        data-testid="input-staff-display-name"
+                        autoFocus
+                      />
+                    </div>
+                  )}
+
+                  {effectiveMode !== "legacy" && (
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium text-slate-300">Staff Username</label>
+                      <Input
+                        value={username}
+                        onChange={e => setUsername(e.target.value)}
+                        placeholder="e.g. morgan.vance"
+                        className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"
+                        data-testid="input-admin-username"
+                        autoFocus={effectiveMode === "staff"}
+                      />
+                    </div>
+                  )}
+
+                  {effectiveMode === "enroll" && (
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium text-slate-300">Configured Admin Password</label>
+                      <Input
+                        type="password"
+                        value={adminPassword}
+                        onChange={e => setAdminPassword(e.target.value)}
+                        placeholder="Shared ADMIN_PASSWORD from server config"
+                        className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"
+                        data-testid="input-master-admin-password"
+                      />
+                    </div>
+                  )}
+
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-slate-300">
+                      {effectiveMode === "legacy"
+                        ? "Configured Admin Password"
+                        : effectiveMode === "staff"
+                          ? "Staff Password"
+                          : "Personal Staff Password (min 10 chars)"}
+                    </label>
+                    <div className="relative">
+                      <Input
+                        type={showPassword ? "text" : "password"}
+                        value={password}
+                        onChange={e => setPassword(e.target.value)}
+                        placeholder={effectiveMode === "legacy" ? "Enter configured admin password" : "Enter password"}
+                        className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500 pr-10"
+                        data-testid="input-admin-password"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(v => !v)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200"
+                      >
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {error && (
+                    <p className="text-sm text-red-400 bg-red-400/10 border border-red-400/20 rounded-lg px-3 py-2">{error}</p>
+                  )}
+
+                  <Button
+                    type="submit"
+                    className="w-full"
+                    disabled={
+                      loading ||
+                      !password ||
+                      (effectiveMode !== "legacy" && !username.trim()) ||
+                      ((effectiveMode === "bootstrap" || effectiveMode === "enroll") && !displayName.trim()) ||
+                      (effectiveMode === "enroll" && !adminPassword)
+                    }
+                    data-testid="button-admin-login"
+                  >
+                    {loading ? (
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                    ) : effectiveMode === "bootstrap" || effectiveMode === "enroll" ? (
+                      <UserPlus className="w-4 h-4 mr-2" />
+                    ) : effectiveMode === "legacy" ? (
+                      <KeyRound className="w-4 h-4 mr-2" />
+                    ) : (
+                      <ShieldCheck className="w-4 h-4 mr-2" />
+                    )}
+                    {effectiveMode === "bootstrap"
+                      ? "Create Initial Staff Admin & Sign In"
+                      : effectiveMode === "enroll"
+                        ? "Enroll Staff Account & Sign In"
+                        : effectiveMode === "legacy"
+                          ? "Sign In with Admin Key"
+                          : "Sign In to Admin"}
+                  </Button>
+                </form>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+// ─── Stat Card ────────────────────────────────────────────────────────────────
+function StatCard({ icon: Icon, label, value, color = "text-primary" }: {
+  icon: any; label: string; value: string | number; color?: string;
+}) {
+  return (
+    <Card className="bg-slate-800/40 border-slate-700">
+      <CardContent className="flex items-center gap-4 pt-5 pb-5">
+        <div className={`p-3 rounded-xl bg-slate-700/50`}>
+          <Icon className={`w-5 h-5 ${color}`} />
+        </div>
+        <div>
+          <p className="text-xs text-slate-400 font-medium uppercase tracking-wide">{label}</p>
+          <p className="text-xl font-bold text-white mt-0.5">{value}</p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Status Badge ─────────────────────────────────────────────────────────────
+function StatusBadge({ status }: { status: string }) {
+  const variants: Record<string, string> = {
+    pending: "bg-amber-400/10 text-amber-400 border-amber-400/20",
+    completed: "bg-emerald-400/10 text-emerald-400 border-emerald-400/20",
+    failed: "bg-red-400/10 text-red-400 border-red-400/20",
+  };
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${variants[status] || "bg-slate-400/10 text-slate-400 border-slate-400/20"}`}>
+      {status}
+    </span>
+  );
+}
+
+// ─── Application Card ──────────────────────────────────────────────────────────
+function ApplicationCard({ app, onApprove, onReject, isPending }: {
+  app: any; onApprove: (id: number) => void; onReject: (id: number) => void; isPending: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const statusColors: Record<string, string> = {
+    pending: "bg-amber-400/10 text-amber-400 border-amber-400/20",
+    approved: "bg-emerald-400/10 text-emerald-400 border-emerald-400/20",
+    rejected: "bg-red-400/10 text-red-400 border-red-400/20",
+  };
+
+  return (
+    <div className="rounded-xl bg-slate-700/30 border border-slate-600/50 overflow-hidden" data-testid={`app-card-${app.id}`}>
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-4">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-white font-semibold">{app.fullName}</span>
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${statusColors[app.status] || "bg-slate-400/10 text-slate-400 border-slate-400/20"}`}>
+              {app.status}
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-3 mt-1 text-xs text-slate-400">
+            <span>{app.email}</span>
+            <span className="text-slate-600">•</span>
+            <span>{app.phone}</span>
+            <span className="text-slate-600">•</span>
+            <span>{new Date(app.createdAt).toLocaleDateString()}</span>
+          </div>
+          {app.notes && (
+            <p className="mt-1 text-xs text-slate-400 italic">Note: {app.notes}</p>
+          )}
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button size="sm" variant="ghost" onClick={() => setExpanded(v => !v)} className="text-slate-400 hover:text-white gap-1">
+            {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            Details
+          </Button>
+          {app.status === "pending" && (
+            <>
+              <Button size="sm" disabled={isPending} onClick={() => onApprove(app.id)}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1" data-testid={`button-approve-app-${app.id}`}>
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Approve
+              </Button>
+              <Button size="sm" variant="outline" disabled={isPending} onClick={() => onReject(app.id)}
+                className="border-red-500/40 text-red-400 hover:bg-red-500/10 gap-1" data-testid={`button-reject-app-${app.id}`}>
+                <XCircle className="w-3.5 h-3.5" />
+                Reject
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {expanded && (
+        <div className="border-t border-slate-600/50 p-4 bg-slate-800/30">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-3 text-xs">
+            {[
+              ["Date of Birth", app.dateOfBirth],
+              ["Nationality", app.nationality],
+              ["Address", app.address],
+              ["City", app.city],
+              ["Country", app.country],
+              ["Employment", app.employmentStatus],
+              ["Annual Income", app.annualIncome],
+              ["Inv. Experience", app.investmentExperience],
+              ["Risk Tolerance", app.riskTolerance],
+              ["Investment Goal", app.investmentGoal],
+              ["Initial Deposit", app.initialDeposit],
+              ["Source of Funds", app.sourceOfFunds],
+            ].map(([label, value]) => value && (
+              <div key={label}>
+                <span className="text-slate-500 uppercase tracking-wide">{label}</span>
+                <p className="text-slate-200 font-medium capitalize mt-0.5">{String(value).replace(/-/g, " ")}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Main Dashboard ───────────────────────────────────────────────────────────
+function AdminDashboard({
+  adminKey,
+  currentStaff,
+  legacyKeyMode,
+  onLogout,
+}: {
+  adminKey: string;
+  currentStaff: AdminStaff | null;
+  legacyKeyMode: boolean;
+  onLogout: () => void;
+}) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const [staffDialogOpen, setStaffDialogOpen] = useState(false);
+  const [newStaffForm, setNewStaffForm] = useState({ username: "", displayName: "", password: "" });
+
+  const adminGet = useCallback((path: string) =>
+    adminFetch(path, adminKey).then(async r => {
+      const data = await r.json();
+      if (!r.ok) throw new Error(data?.message || "Request failed");
+      return data;
+    }), [adminKey]);
+
+  const { data: stats, isLoading: statsLoading } = useQuery({
+    queryKey: ["/api/admin/stats"],
+    queryFn: () => adminGet("/api/admin/stats"),
+    refetchInterval: 30000,
+  });
+
+  const { data: allUsers = [], isLoading: usersLoading } = useQuery({
+    queryKey: ["/api/admin/users"],
+    queryFn: () => adminGet("/api/admin/users"),
+  });
+
+  const { data: staffList = [], isLoading: staffLoading, refetch: refetchStaff } = useQuery<any[]>({
+    queryKey: ["/api/admin/staff"],
+    queryFn: () => adminGet("/api/admin/staff"),
+  });
+
+  const createStaffMutation = useMutation({
+    mutationFn: async () => {
+      const res = await adminFetch("/api/admin/staff", adminKey, {
+        method: "POST",
+        body: JSON.stringify(newStaffForm),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || "Failed to add staff administrator");
+      return data;
+    },
+    onSuccess: (created) => {
+      toast({
+        title: "Staff administrator added",
+        description: `${created.displayName} (@${created.username}) can now sign in to create or approve postings.`,
+      });
+      setNewStaffForm({ username: "", displayName: "", password: "" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/staff"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/auth/status"] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Could not add staff admin", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const toggleStaffActiveMutation = useMutation({
+    mutationFn: async ({ id, active }: { id: number; active: boolean }) => {
+      const res = await adminFetch(`/api/admin/staff/${id}`, adminKey, {
+        method: "PATCH",
+        body: JSON.stringify({ active }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || "Failed to update staff status");
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/staff"] });
+      toast({ title: "Staff access updated" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const handleSignOut = async () => {
+    try {
+      await adminFetch("/api/admin/logout", adminKey, { method: "POST" });
+    } catch {
+      // Clear local session regardless of network failure
+    }
+    queryClient.clear();
+    onLogout();
+  };
+
+  const { data: instTransfers = [], isLoading: instLoading } = useQuery({
+    queryKey: ["/api/admin/institutional-transfers"],
+    queryFn: () => adminGet("/api/admin/institutional-transfers"),
+    refetchInterval: 30000,
+  });
+
+  const updateInstMonitorMutation = useMutation({
+    mutationFn: ({ id, status, estimatedCompletionDate, adminNotes }: { id: number; status: string; estimatedCompletionDate?: string; adminNotes?: string }) =>
+      adminFetch(`/api/admin/institutional-transfers/${id}`, adminKey, {
+        method: "PATCH",
+        body: JSON.stringify({ status, estimatedCompletionDate: estimatedCompletionDate || null, adminNotes }),
+      }).then(r => r.json()),
+    onSuccess: () => {
+      toast({ title: "Monitor Updated", description: "Client's transfer status has been updated." });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/institutional-transfers"] });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to update transfer monitor.", variant: "destructive" }),
+  });
+
+  const [monitorDialog, setMonitorDialog] = useState<{ transfer: any } | null>(null);
+  const [monitorForm, setMonitorForm] = useState({ status: "pending", estimatedCompletionDate: "", adminNotes: "" });
+
+  // Wire & Beneficiaries
+  const { data: allPayees = [], isLoading: payeesLoading } = useQuery({
+    queryKey: ["/api/admin/payees"],
+    queryFn: () => adminGet("/api/admin/payees"),
+    refetchInterval: 30000,
+  });
+
+  const { data: wireTransfers = [], isLoading: wireLoading } = useQuery({
+    queryKey: ["/api/admin/wire-transfers"],
+    queryFn: () => adminGet("/api/admin/wire-transfers"),
+    refetchInterval: 30000,
+  });
+
+  const approvePayeeMutation = useMutation({
+    mutationFn: (id: number) =>
+      adminFetch(`/api/admin/payees/${id}/approve`, adminKey, { method: "POST" }).then(r => r.json()),
+    onSuccess: () => {
+      toast({ title: "Beneficiary Approved", description: "Client can now wire to this beneficiary." });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/payees"] });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to approve beneficiary.", variant: "destructive" }),
+  });
+
+  const rejectPayeeMutation = useMutation({
+    mutationFn: (id: number) =>
+      adminFetch(`/api/admin/payees/${id}/reject`, adminKey, { method: "POST" }).then(r => r.json()),
+    onSuccess: () => {
+      toast({ title: "Beneficiary Rejected" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/payees"] });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to reject beneficiary.", variant: "destructive" }),
+  });
+
+  const [wireDialog, setWireDialog] = useState<{ txn: any } | null>(null);
+  const [wireForm, setWireForm] = useState({ status: "pending", adminNotes: "" });
+
+  const updateWireMutation = useMutation({
+    mutationFn: ({ id, status, adminNotes }: { id: number; status: string; adminNotes?: string }) =>
+      adminFetch(`/api/admin/wire-transfers/${id}`, adminKey, {
+        method: "PATCH", body: JSON.stringify({ status, adminNotes }),
+      }).then(r => r.json()),
+    onSuccess: () => {
+      toast({ title: "Wire Transfer Updated" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/wire-transfers"] });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to update wire transfer.", variant: "destructive" }),
+  });
+
+  const { data: allApplications = [], isLoading: appsLoading, refetch: refetchApps } = useQuery({
+    queryKey: ["/api/admin/applications"],
+    queryFn: () => adminGet("/api/admin/applications"),
+    refetchInterval: 30000,
+  });
+
+  const [activationResult, setActivationResult] = useState<{
+    clientRef: string;
+    userName: string;
+    activationUrl: string;
+    expiresAt: string;
+  } | null>(null);
+  const [activationCopied, setActivationCopied] = useState(false);
+  const [activationCopyError, setActivationCopyError] = useState(false);
+
+  const approveAppMutation = useMutation({
+    mutationFn: async ({ id, notes }: { id: number; notes?: string }) => {
+      const response = await adminFetch(`/api/admin/applications/${id}/approve`, adminKey, {
+        method: "POST", body: JSON.stringify({ notes }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.message || "Failed to approve application");
+      return data;
+    },
+    onSuccess: (data) => {
+      setActivationResult({
+        clientRef: data.clientRef,
+        userName: data.userName,
+        activationUrl: new URL(data.activationPath, window.location.origin).toString(),
+        expiresAt: data.activationExpiresAt,
+      });
+      setActivationCopied(false);
+      setActivationCopyError(false);
+      toast({ title: "Application approved", description: "The Client ID and one-time setup link are available in this admin page." });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/applications"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message || "Failed to approve", variant: "destructive" }),
+  });
+
+  const rejectAppMutation = useMutation({
+    mutationFn: ({ id, notes }: { id: number; notes?: string }) =>
+      adminFetch(`/api/admin/applications/${id}/reject`, adminKey, {
+        method: "POST", body: JSON.stringify({ notes }),
+      }).then(r => r.json()),
+    onSuccess: () => {
+      toast({ title: "Application Rejected", description: "Applicant notified." });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/applications"] });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to reject application", variant: "destructive" }),
+  });
+
+  const restrictUserMutation = useMutation({
+    mutationFn: ({ id, restricted, message }: { id: number; restricted: boolean; message?: string }) =>
+      adminFetch(`/api/admin/users/${id}/restrict`, adminKey, {
+        method: "POST", body: JSON.stringify({ restricted, message }),
+      }).then(r => r.json()),
+    onSuccess: (_, vars) => {
+      toast({ title: vars.restricted ? "Access Restricted" : "Access Restored", description: vars.restricted ? "User can no longer sign in." : "User can now sign in again." });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to update restriction.", variant: "destructive" }),
+  });
+
+  const [restrictDialog, setRestrictDialog] = useState<{ user: any } | null>(null);
+  const [restrictMsg, setRestrictMsg] = useState("");
+  const [freezeDialog, setFreezeDialog] = useState<{ user: any } | null>(null);
+  const [freezeReason, setFreezeReason] = useState("");
+  const [currencyClient, setCurrencyClient] = useState<any | null>(null);
+  const [debtNoticeClient, setDebtNoticeClient] = useState<any | null>(null);
+
+  const freezeUserMutation = useMutation({
+    mutationFn: ({ id, frozen, reason }: { id: number; frozen: boolean; reason?: string }) =>
+      adminFetch(`/api/admin/users/${id}/freeze`, adminKey, {
+        method: "POST", body: JSON.stringify({ frozen, reason }),
+      }).then(r => r.json()),
+    onSuccess: (_, vars) => {
+      toast({
+        title: vars.frozen ? "Account Frozen" : "Account Unfrozen",
+        description: vars.frozen
+          ? "All sessions terminated. Client cannot log in."
+          : "Account has been restored to normal access.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      setFreezeDialog(null);
+      setFreezeReason("");
+    },
+    onError: () => toast({ title: "Error", description: "Failed to update account freeze status.", variant: "destructive" }),
+  });
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+      {/* Header */}
+      <div className="border-b border-slate-700 bg-slate-800/50 backdrop-blur sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-primary/20 border border-primary/30 flex items-center justify-center">
+              <ShieldCheck className="w-4 h-4 text-primary" />
+            </div>
+            <div>
+              <h1 className="text-white font-bold text-sm leading-none">Veritas Wealth</h1>
+              <p className="text-slate-400 text-xs mt-0.5">Admin Portal</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap justify-end">
+            {currentStaff ? (
+              <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-300">
+                <UserCheck className="w-3.5 h-3.5" />
+                <span>{currentStaff.displayName}</span>
+                <span className="text-emerald-400/70 font-mono">(@{currentStaff.username})</span>
+              </div>
+            ) : (
+              <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300">
+                <ShieldAlert className="w-3.5 h-3.5" />
+                <span>Shared Key Mode</span>
+              </div>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { setStaffDialogOpen(true); refetchStaff(); }}
+              className="border-slate-600 text-slate-200 hover:bg-slate-700"
+              data-testid="button-manage-staff"
+            >
+              <UserPlus className="w-3.5 h-3.5 mr-1.5" />
+              Staff Access ({Array.isArray(staffList) ? staffList.filter((s: any) => s.active).length : 0})
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleSignOut}
+              className="text-slate-400 hover:text-white hover:bg-slate-700"
+              data-testid="button-admin-logout"
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Sign Out
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Staff Access Dialog */}
+      <ShadDialog open={staffDialogOpen} onOpenChange={setStaffDialogOpen}>
+        <ShadDialogContent className="bg-slate-800 border-slate-700 text-white max-w-lg">
+          <ShadDialogHeader>
+            <ShadDialogTitle className="flex items-center gap-2 text-white">
+              <UserCheck className="w-4 h-4 text-primary" />
+              Staff Administrators (Dual Control)
+            </ShadDialogTitle>
+          </ShadDialogHeader>
+          <div className="space-y-5 py-2">
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Every direct deposit, transfer posting, or reversal created by a staff administrator requires approval from a different active staff administrator before client balances change.
+            </p>
+
+            <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+              {staffLoading ? (
+                <div className="flex items-center justify-center py-6 text-slate-400 text-xs">
+                  <RefreshCw className="w-4 h-4 animate-spin mr-2" /> Loading staff…
+                </div>
+              ) : (Array.isArray(staffList) ? staffList : []).length === 0 ? (
+                <p className="text-xs text-slate-400 py-4 text-center">No staff accounts created yet.</p>
+              ) : (
+                (Array.isArray(staffList) ? staffList : []).map((s: any) => (
+                  <div
+                    key={s.id}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-slate-700 bg-slate-900/40 px-3 py-2.5"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-white truncate">{s.displayName}</span>
+                        <span className="text-xs font-mono text-slate-400">@{s.username}</span>
+                        {currentStaff?.id === s.id && (
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-primary/20 text-primary">You</span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        {s.active ? "Active" : "Deactivated"} · Added {new Date(s.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                    {currentStaff && currentStaff.id !== s.id && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={toggleStaffActiveMutation.isPending}
+                        onClick={() => toggleStaffActiveMutation.mutate({ id: s.id, active: !s.active })}
+                        className="h-7 text-xs border-slate-600 text-slate-300 hover:bg-slate-700"
+                      >
+                        {s.active ? "Deactivate" : "Reactivate"}
+                      </Button>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="border-t border-slate-700 pt-4 space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-300">Add Another Staff Administrator</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <Input
+                  value={newStaffForm.displayName}
+                  onChange={e => setNewStaffForm(f => ({ ...f, displayName: e.target.value }))}
+                  placeholder="Full name (e.g. Alex Chen)"
+                  className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-500 text-sm"
+                  data-testid="input-new-staff-name"
+                />
+                <Input
+                  value={newStaffForm.username}
+                  onChange={e => setNewStaffForm(f => ({ ...f, username: e.target.value }))}
+                  placeholder="Username (e.g. alex.chen)"
+                  className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-500 text-sm"
+                  data-testid="input-new-staff-username"
+                />
+              </div>
+              <Input
+                type="password"
+                value={newStaffForm.password}
+                onChange={e => setNewStaffForm(f => ({ ...f, password: e.target.value }))}
+                placeholder="Initial password (min 10 characters)"
+                className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-500 text-sm"
+                data-testid="input-new-staff-password"
+              />
+              <Button
+                type="button"
+                disabled={
+                  createStaffMutation.isPending ||
+                  !newStaffForm.displayName.trim() ||
+                  !newStaffForm.username.trim() ||
+                  newStaffForm.password.length < 10
+                }
+                onClick={() => createStaffMutation.mutate()}
+                className="w-full"
+                data-testid="button-create-staff"
+              >
+                {createStaffMutation.isPending ? <RefreshCw className="w-3.5 h-3.5 mr-2 animate-spin" /> : <UserPlus className="w-3.5 h-3.5 mr-2" />}
+                Create Staff Administrator
+              </Button>
+            </div>
+          </div>
+        </ShadDialogContent>
+      </ShadDialog>
+
+      <div className="max-w-7xl mx-auto px-6 py-8 space-y-8">
+        {legacyKeyMode && !currentStaff && (
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-start gap-2">
+              <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5 text-amber-300" />
+              <span>
+                You signed in with the shared Admin Key. To create, approve, or reverse money movements, add a staff administrator under <strong>Staff Access</strong> and sign in with your personal staff credentials.
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Stats */}
+        <div>
+          <h2 className="text-white font-semibold mb-4">Platform Overview</h2>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <StatCard icon={Users} label="Total Users" value={statsLoading ? "—" : stats?.userCount ?? 0} />
+            <StatCard icon={ArrowLeftRight} label="Transactions" value={statsLoading ? "—" : stats?.txCount ?? 0} />
+            <StatCard
+              icon={Clock}
+              label="Pending Review"
+              value={statsLoading ? "—" : (stats?.pendingCount ?? 0) + (stats?.pendingSecondAdminCount ?? 0)}
+              color="text-amber-400"
+            />
+            <StatCard icon={DollarSign} label="Total Volume" value={statsLoading ? "—" : fmt(stats?.totalVolume ?? 0)} color="text-emerald-400" />
+            <StatCard icon={Wallet} label="Account cash balances · CAD" value={statsLoading ? "—" : fmt(stats?.totalAssets ?? 0)} color="text-sky-400" />
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <Tabs defaultValue="transactions">
+          <TabsList className="bg-slate-800 border border-slate-700 flex-wrap h-auto gap-1 p-1">
+            <TabsTrigger value="applications" className="data-[state=active]:bg-primary data-[state=active]:text-white text-slate-400">
+              <FileText className="w-3.5 h-3.5 mr-1.5" />
+              Applications
+              {Array.isArray(allApplications) && allApplications.filter((a: any) => a.status === "pending").length > 0 && (
+                <span className="ml-2 bg-amber-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                  {allApplications.filter((a: any) => a.status === "pending").length}
+                </span>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="transactions" className="data-[state=active]:bg-primary data-[state=active]:text-white text-slate-400" data-testid="tab-admin-transactions">
+              <ArrowLeftRight className="w-3.5 h-3.5 mr-1.5" />
+              Transactions
+              {((stats?.pendingCount ?? 0) + (stats?.pendingSecondAdminCount ?? 0)) > 0 && (
+                <span className="ml-2 bg-amber-500 text-white text-xs rounded-full min-w-5 h-5 px-1 flex items-center justify-center">
+                  {(stats?.pendingCount ?? 0) + (stats?.pendingSecondAdminCount ?? 0)}
+                </span>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="users" className="data-[state=active]:bg-primary data-[state=active]:text-white text-slate-400">
+              Users
+            </TabsTrigger>
+            <TabsTrigger value="historical-balances" className="data-[state=active]:bg-primary data-[state=active]:text-white text-slate-400">
+              <History className="w-3.5 h-3.5 mr-1.5" />
+              Historical Balances
+            </TabsTrigger>
+            <TabsTrigger value="inst-transfers" className="data-[state=active]:bg-primary data-[state=active]:text-white text-slate-400">
+              <Building2 className="w-3.5 h-3.5 mr-1.5" />
+              Inst. Transfers
+              {Array.isArray(instTransfers) && instTransfers.filter((t: any) => t.status === "pending").length > 0 && (
+                <span className="ml-2 bg-amber-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                  {instTransfers.filter((t: any) => t.status === "pending").length}
+                </span>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="fees" className="data-[state=active]:bg-primary data-[state=active]:text-white text-slate-400">
+              <DollarSign className="w-3.5 h-3.5 mr-1.5" />
+              Service Fees
+            </TabsTrigger>
+            <TabsTrigger value="security" className="data-[state=active]:bg-primary data-[state=active]:text-white text-slate-400">
+              Recovery requests
+            </TabsTrigger>
+            <TabsTrigger value="wire" className="data-[state=active]:bg-primary data-[state=active]:text-white text-slate-400">
+              <ArrowLeftRight className="w-3.5 h-3.5 mr-1.5" />
+              Wire & Beneficiaries
+              {Array.isArray(allPayees) && allPayees.filter((p: any) => p.status === "pending_approval").length > 0 && (
+                <span className="ml-2 bg-amber-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                  {allPayees.filter((p: any) => p.status === "pending_approval").length}
+                </span>
+              )}
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="fees" className="mt-4">
+            <AdminFees adminKey={adminKey} />
+          </TabsContent>
+          <TabsContent value="security" className="mt-4">
+            <AdminRecoveryRequests adminKey={adminKey} />
+          </TabsContent>
+
+          {/* ── Client Applications ── */}
+          <TabsContent value="applications" className="mt-4">
+            <Card className="bg-slate-800/40 border-slate-700">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-white text-base flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-primary" />
+                  Account Applications
+                  <Button size="sm" variant="ghost" onClick={() => refetchApps()} className="ml-auto text-slate-400 hover:text-white">
+                    <RefreshCw className="w-3.5 h-3.5" />
+                  </Button>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {activationResult && (
+                  <div className="mb-5 border border-emerald-500/30 bg-emerald-500/5 p-4" data-testid="application-activation-result">
+                    <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
+                      <h3 className="text-sm font-semibold text-emerald-300">
+                        Approved: {activationResult.userName}
+                      </h3>
+                      <span className="font-mono text-sm text-white">
+                        Client ID: {activationResult.clientRef}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-xs leading-relaxed text-slate-300">
+                      Verify the recipient through an established contact method before sharing. This setup link expires {new Date(activationResult.expiresAt).toLocaleString()} and can be used once.
+                    </p>
+                    <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                      <Input
+                        readOnly
+                        value={activationResult.activationUrl}
+                        aria-label="One-time account setup link"
+                        className="min-w-0 border-slate-600 bg-slate-900 text-xs text-slate-200"
+                        onFocus={event => event.currentTarget.select()}
+                        data-testid="input-activation-link"
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="shrink-0 border-slate-500 text-slate-200"
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(activationResult.activationUrl);
+                            setActivationCopied(true);
+                            setActivationCopyError(false);
+                          } catch {
+                            setActivationCopied(false);
+                            setActivationCopyError(true);
+                          }
+                        }}
+                        data-testid="button-copy-activation-link"
+                      >
+                        <Copy className="mr-2 h-3.5 w-3.5" />
+                        {activationCopied ? "Copied" : "Copy link"}
+                      </Button>
+                    </div>
+                    {activationCopyError && (
+                      <p className="mt-2 text-xs text-amber-300">Copy was blocked by the browser. Select the link above and copy it manually.</p>
+                    )}
+                  </div>
+                )}
+                {appsLoading ? (
+                  <div className="flex items-center justify-center py-12 text-slate-400">
+                    <RefreshCw className="w-5 h-5 animate-spin mr-2" /> Loading…
+                  </div>
+                ) : !Array.isArray(allApplications) || allApplications.length === 0 ? (
+                  <div className="text-center py-12">
+                    <FileText className="w-10 h-10 text-slate-600 mx-auto mb-3" />
+                    <p className="text-slate-400">No applications yet</p>
+                    <p className="text-slate-500 text-sm mt-1">New applications will appear here</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {(Array.isArray(allApplications) ? allApplications : []).map((app: any) => (
+                      <ApplicationCard
+                        key={app.id}
+                        app={app}
+                        onApprove={(id) => approveAppMutation.mutate({ id })}
+                        onReject={(id) => rejectAppMutation.mutate({ id })}
+                        isPending={approveAppMutation.isPending || rejectAppMutation.isPending}
+                      />
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* ── Unified Transactions (Review Requests, Direct Postings, Immutable Ledger & Audit Trail) ── */}
+          <TabsContent value="transactions" className="mt-4">
+            <AdminTransactions
+              adminKey={adminKey}
+              currentStaff={currentStaff}
+              allUsers={Array.isArray(allUsers) ? allUsers : []}
+            />
+          </TabsContent>
+
+          {/* ── Users ── */}
+          <TabsContent value="users" className="mt-4">
+            <DebtRestrictionPanel user={debtNoticeClient} adminKey={adminKey} onClose={() => setDebtNoticeClient(null)} />
+            <ClientCurrencyPanel
+              user={currencyClient}
+              adminKey={adminKey}
+              open={!!currencyClient}
+              onOpenChange={open => { if (!open) setCurrencyClient(null); }}
+            />
+            {/* Restrict dialog */}
+            {/* Freeze dialog */}
+            <ShadDialog open={!!freezeDialog} onOpenChange={(o) => { if (!o) { setFreezeDialog(null); setFreezeReason(""); } }}>
+              <ShadDialogContent className="bg-slate-800 border-sky-500/30 text-white">
+                <ShadDialogHeader>
+                  <ShadDialogTitle className="flex items-center gap-2">
+                    <Snowflake className="w-4 h-4 text-sky-400" />
+                    Freeze Account — {freezeDialog?.user?.name}
+                  </ShadDialogTitle>
+                </ShadDialogHeader>
+                <div className="space-y-3 py-2">
+                  <div className="bg-sky-500/10 border border-sky-500/20 rounded-lg px-3 py-2.5 text-xs text-sky-300">
+                    Freezing this account will immediately terminate all active sessions and prevent the client from logging in. All API access will be blocked with a compliance hold notice.
+                  </div>
+                  <Textarea
+                    value={freezeReason}
+                    onChange={e => setFreezeReason(e.target.value)}
+                    placeholder="e.g. Account suspended pending fraud investigation — fraudulent payment reported on investment account. Reference: FRD-2025-0142."
+                    className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-500 min-h-[100px] resize-none"
+                  />
+                  <p className="text-slate-500 text-xs">Freeze reason is mandatory and will be visible in the audit trail.</p>
+                </div>
+                <ShadDialogFooter>
+                  <Button variant="ghost" className="text-slate-400 hover:text-white" onClick={() => { setFreezeDialog(null); setFreezeReason(""); }}>Cancel</Button>
+                  <Button
+                    className="bg-sky-600 hover:bg-sky-700 text-white"
+                    disabled={!freezeReason.trim() || freezeUserMutation.isPending}
+                    onClick={() => freezeUserMutation.mutate({ id: freezeDialog!.user.id, frozen: true, reason: freezeReason.trim() })}
+                  >
+                    <Snowflake className="w-3.5 h-3.5 mr-1.5" />
+                    Freeze Account
+                  </Button>
+                </ShadDialogFooter>
+              </ShadDialogContent>
+            </ShadDialog>
+
+            <ShadDialog open={!!restrictDialog} onOpenChange={(o) => { if (!o) { setRestrictDialog(null); setRestrictMsg(""); } }}>
+              <ShadDialogContent className="bg-slate-800 border-slate-700 text-white">
+                <ShadDialogHeader>
+                  <ShadDialogTitle className="flex items-center gap-2">
+                    <Lock className="w-4 h-4 text-red-400" />
+                    Restrict Login — {restrictDialog?.user?.name}
+                  </ShadDialogTitle>
+                </ShadDialogHeader>
+                <div className="space-y-3 py-2">
+                  <p className="text-slate-400 text-sm">This user will be blocked from signing in. Optionally add a message they will see when they attempt to log in.</p>
+                  <Textarea
+                    value={restrictMsg}
+                    onChange={e => setRestrictMsg(e.target.value)}
+                    placeholder="e.g. Your account has been suspended pending KYC review. Please contact your advisor at veritaswealth@accountant.com."
+                    className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-500 min-h-[100px] resize-none"
+                  />
+                </div>
+                <ShadDialogFooter>
+                  <Button variant="ghost" className="text-slate-400 hover:text-white" onClick={() => { setRestrictDialog(null); setRestrictMsg(""); }}>Cancel</Button>
+                  <Button
+                    className="bg-red-600 hover:bg-red-700 text-white"
+                    disabled={restrictUserMutation.isPending}
+                    onClick={() => {
+                      restrictUserMutation.mutate({ id: restrictDialog!.user.id, restricted: true, message: restrictMsg || undefined }, {
+                        onSuccess: () => { setRestrictDialog(null); setRestrictMsg(""); }
+                      });
+                    }}
+                  >
+                    <Lock className="w-3.5 h-3.5 mr-1.5" />
+                    Restrict Access
+                  </Button>
+                </ShadDialogFooter>
+              </ShadDialogContent>
+            </ShadDialog>
+
+            <Card className="bg-slate-800/40 border-slate-700">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-white text-base flex items-center gap-2">
+                  <Users className="w-4 h-4 text-primary" />
+                  All Users
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {usersLoading ? (
+                  <div className="flex items-center justify-center py-12 text-slate-400">
+                    <RefreshCw className="w-5 h-5 animate-spin mr-2" /> Loading…
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {(allUsers as any[]).map((u: any) => (
+                      <div key={u.id} className={`rounded-lg border p-4 ${u.accountFrozen ? "border-sky-500/40 bg-sky-500/5" : u.loginRestricted ? "border-red-500/30 bg-red-500/5" : "border-slate-700 bg-slate-700/20"}`} data-testid={`user-row-${u.id}`}>
+                        {u.debtClearanceRequired && <Button variant="outline" size="sm"
+                          className="mb-3 border-slate-500 bg-transparent text-slate-200"
+                          data-testid={`debt-notice-admin-${u.id}`}
+                          onClick={() => setDebtNoticeClient(u)}>Debt restriction notice</Button>}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div className="flex items-start gap-3 min-w-0">
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-xs font-bold ${u.accountFrozen ? "bg-sky-500/20 text-sky-400" : u.loginRestricted ? "bg-red-500/20 text-red-400" : "bg-primary/20 text-primary"}`}>
+                              {u.accountFrozen ? <Snowflake className="w-4 h-4" /> : u.name?.charAt(0)?.toUpperCase()}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-white font-medium text-sm">{u.name}</span>
+                                <span className="text-slate-500 font-mono text-xs">#{u.id}</span>
+                                {u.accountFrozen && (
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-sky-500/20 text-sky-300 border border-sky-500/30">
+                                    <Snowflake className="w-2.5 h-2.5" /> FROZEN
+                                  </span>
+                                )}
+                                {u.loginRestricted && !u.accountFrozen && (
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-500/20 text-red-400 border border-red-500/20">
+                                    <Lock className="w-2.5 h-2.5" /> RESTRICTED
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-slate-400 text-xs mt-0.5">{u.email}</p>
+                              {u.accountFrozen && u.freezeReason && (
+                                <p className="text-sky-400/70 text-xs mt-1 italic">
+                                  <Snowflake className="w-2.5 h-2.5 inline mr-1" />
+                                  Freeze reason: "{u.freezeReason}"
+                                  {u.frozenAt && <span className="ml-2 text-slate-500">— {new Date(u.frozenAt).toLocaleDateString("en-CA")}</span>}
+                                </p>
+                              )}
+                              {u.loginRestricted && !u.accountFrozen && u.loginRestrictionMessage && (
+                                <p className="text-red-400/70 text-xs mt-1 italic">"{u.loginRestrictionMessage}"</p>
+                              )}
+                              <div className="flex gap-4 mt-1.5 text-xs text-slate-500">
+                                <span>{u.accountCount} account{u.accountCount !== 1 ? "s" : ""}</span>
+                                <span className="text-emerald-400 font-medium">
+                                  {u.totalBalance === null || u.totalBalance === undefined
+                                    ? "Unavailable"
+                                    : formatBalance(u.totalBalance, clientBalanceCurrency(u))}
+                                  <span className="ml-1 text-slate-500">{clientBalanceCurrency(u) === "GBP" ? "£ display" : "CAD display"}</span>
+                                </span>
+                                <span>{new Date(u.createdAt).toLocaleDateString()}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex gap-2 shrink-0 flex-wrap justify-end">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="border-primary/40 text-primary hover:bg-primary/10 text-xs h-8"
+                              onClick={() => setCurrencyClient(u)}
+                            >
+                              Display &amp; accounts
+                            </Button>
+                            {u.accountFrozen ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="border-sky-500/30 text-sky-400 hover:bg-sky-500/10 text-xs h-8"
+                                disabled={freezeUserMutation.isPending}
+                                onClick={() => freezeUserMutation.mutate({ id: u.id, frozen: false })}
+                              >
+                                <Snowflake className="w-3 h-3 mr-1" /> Unfreeze
+                              </Button>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="border-sky-500/30 text-sky-400 hover:bg-sky-500/10 text-xs h-8"
+                                onClick={() => { setFreezeDialog({ user: u }); setFreezeReason(""); }}
+                              >
+                                <Snowflake className="w-3 h-3 mr-1" /> Freeze
+                              </Button>
+                            )}
+                            {u.loginRestricted ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 hover:text-emerald-300 text-xs h-8"
+                                disabled={restrictUserMutation.isPending}
+                                onClick={() => restrictUserMutation.mutate({ id: u.id, restricted: false })}
+                              >
+                                <Unlock className="w-3 h-3 mr-1" /> Restore Access
+                              </Button>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="border-red-500/30 text-red-400 hover:bg-red-500/10 hover:text-red-300 text-xs h-8"
+                                onClick={() => { setRestrictDialog({ user: u }); setRestrictMsg(""); }}
+                              >
+                                <Lock className="w-3 h-3 mr-1" /> Restrict
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    {(allUsers as any[]).length === 0 && (
+                      <p className="text-center text-slate-400 py-8">No users yet</p>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+          <TabsContent value="historical-balances" className="mt-4">
+            <HistoricalBalances adminKey={adminKey} users={(allUsers as any[]).map(user => ({
+              id: user.id, name: user.name, email: user.email,
+            }))} />
+          </TabsContent>
+          {/* ── Institutional Transfers ── */}
+          <TabsContent value="inst-transfers" className="mt-4">
+            <Card className="bg-slate-800/40 border-slate-700">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-white text-base flex items-center gap-2">
+                  <Building2 className="w-4 h-4 text-primary" />
+                  Institutional Transfer Requests
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {instLoading ? (
+                  <div className="flex items-center justify-center py-12 text-slate-400">
+                    <RefreshCw className="w-5 h-5 animate-spin mr-2" /> Loading…
+                  </div>
+                ) : !Array.isArray(instTransfers) || instTransfers.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Building2 className="w-10 h-10 text-slate-600 mx-auto mb-3" />
+                    <p className="text-slate-400">No institutional transfer requests</p>
+                    <p className="text-slate-500 text-sm mt-1">Requests from clients will appear here</p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Monitor Update Dialog */}
+                    <ShadDialog open={!!monitorDialog} onOpenChange={(o) => { if (!o) setMonitorDialog(null); }}>
+                      <ShadDialogContent className="bg-slate-800 border-slate-700 text-white max-w-lg">
+                        <ShadDialogHeader>
+                          <ShadDialogTitle className="flex items-center gap-2 text-white">
+                            <Activity className="w-4 h-4 text-primary" />
+                            Update Transfer Monitor — IT-{monitorDialog?.transfer?.id}
+                          </ShadDialogTitle>
+                          <p className="text-slate-400 text-xs mt-1">
+                            {monitorDialog?.transfer?.institutionName} · {monitorDialog?.transfer?.userName}
+                          </p>
+                        </ShadDialogHeader>
+
+                        <div className="space-y-5 py-2">
+                          {/* Status picker */}
+                          <div className="space-y-2">
+                            <p className="text-xs uppercase tracking-widest text-slate-400 font-semibold">Status Stage</p>
+                            <div className="grid grid-cols-2 gap-2">
+                              {[
+                                { value: "pending", label: "Pending", desc: "Awaiting advisor review", color: "border-amber-500/40 text-amber-400" },
+                                { value: "under_review", label: "Under Review", desc: "Advisor actively reviewing", color: "border-blue-500/40 text-blue-400" },
+                                { value: "liquidating", label: "Liquidating", desc: "Investments being liquidated", color: "border-orange-500/40 text-orange-400" },
+                                { value: "transfer_out", label: "Transfer Out", desc: "Portfolio transmitting to institution", color: "border-violet-500/40 text-violet-400" },
+                                { value: "completed", label: "Completed", desc: "Confirmed by receiving institution", color: "border-emerald-500/40 text-emerald-400" },
+                                { value: "rejected", label: "Rejected", desc: "Request declined", color: "border-red-500/40 text-red-400" },
+                              ].map(opt => (
+                                <button
+                                  key={opt.value}
+                                  type="button"
+                                  onClick={() => setMonitorForm(f => ({ ...f, status: opt.value }))}
+                                  className={`text-left rounded-lg border p-3 transition-all ${monitorForm.status === opt.value ? `${opt.color} bg-white/5` : "border-slate-600 text-slate-400 hover:border-slate-500"}`}
+                                >
+                                  <p className="text-sm font-semibold">{opt.label}</p>
+                                  <p className="text-xs opacity-70 mt-0.5">{opt.desc}</p>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Estimated completion date */}
+                          {(monitorForm.status === "approved" || monitorForm.status === "under_review") && (
+                            <div className="space-y-1.5">
+                              <label className="text-xs uppercase tracking-widest text-slate-400 font-semibold">Estimated Completion Date</label>
+                              <input
+                                type="date"
+                                value={monitorForm.estimatedCompletionDate}
+                                onChange={e => setMonitorForm(f => ({ ...f, estimatedCompletionDate: e.target.value }))}
+                                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-primary"
+                              />
+                              <p className="text-xs text-slate-500">Shown to client on the Live Transfer Monitor</p>
+                            </div>
+                          )}
+
+                          {/* Advisor note */}
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between">
+                              <label className="text-xs uppercase tracking-widest text-slate-400 font-semibold">Advisor Note <span className="normal-case text-slate-500">(optional)</span></label>
+                              {monitorForm.adminNotes && (
+                                <button type="button" onClick={() => setMonitorForm(f => ({ ...f, adminNotes: "" }))} className="text-[10px] text-slate-500 hover:text-red-400 underline transition-colors">Clear</button>
+                              )}
+                            </div>
+                            <Textarea
+                              value={monitorForm.adminNotes}
+                              onChange={e => setMonitorForm(f => ({ ...f, adminNotes: e.target.value }))}
+                              placeholder="Optional — leave blank if no special message. Example: CDS re-registration initiated. Contact your advisor for questions."
+                              className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-500 resize-none min-h-[80px]"
+                            />
+                            <p className="text-xs text-slate-500">Only fill this in if you have a specific message for the client. Leave blank to hide this section entirely.</p>
+                          </div>
+                        </div>
+
+                        <ShadDialogFooter>
+                          <Button variant="ghost" className="text-slate-400 hover:text-white" onClick={() => setMonitorDialog(null)}>Cancel</Button>
+                          <Button
+                            className="bg-primary hover:bg-primary/90 text-white"
+                            disabled={updateInstMonitorMutation.isPending}
+                            onClick={() => {
+                              updateInstMonitorMutation.mutate({
+                                id: monitorDialog!.transfer.id,
+                                status: monitorForm.status,
+                                estimatedCompletionDate: monitorForm.estimatedCompletionDate || undefined,
+                                adminNotes: monitorForm.adminNotes,
+                              }, { onSuccess: () => setMonitorDialog(null) });
+                            }}
+                          >
+                            <Activity className="w-3.5 h-3.5 mr-1.5" />
+                            Save Monitor Update
+                          </Button>
+                        </ShadDialogFooter>
+                      </ShadDialogContent>
+                    </ShadDialog>
+
+                    <div className="space-y-3">
+                      {(Array.isArray(instTransfers) ? instTransfers : []).map((t: any) => {
+                        const statusColors: Record<string, string> = {
+                          pending: "bg-amber-400/10 text-amber-400 border-amber-400/20",
+                          under_review: "bg-blue-400/10 text-blue-400 border-blue-400/20",
+                          approved: "bg-emerald-400/10 text-emerald-400 border-emerald-400/20",
+                          rejected: "bg-red-400/10 text-red-400 border-red-400/20",
+                        };
+                        const statusLabel: Record<string, string> = {
+                          pending: "Pending", under_review: "Under Review", approved: "Liquidating", liquidating: "Liquidating", transfer_out: "Transfer Out", completed: "Completed", rejected: "Rejected",
+                        };
+                        return (
+                          <div key={t.id} className="rounded-xl bg-slate-700/30 border border-slate-600/50 p-4" data-testid={`inst-transfer-admin-${t.id}`}>
+                            <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-white font-semibold font-mono text-sm">IT-{t.id}</span>
+                                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${statusColors[t.status] || statusColors.pending}`}>
+                                    {statusLabel[t.status] || t.status}
+                                  </span>
+                                  <span className="text-xs text-slate-400 bg-slate-600/40 px-2 py-0.5 rounded-full">
+                                    {t.transferType === "in-kind" ? "In-Kind" : "Cash"} · {t.transferScope === "full" ? "Full" : `Partial CAD $${Number(t.partialAmount).toLocaleString()}`}
+                                  </span>
+                                </div>
+                                <p className="text-slate-200 font-medium text-sm mt-1">{t.institutionName}</p>
+                                <div className="text-xs text-slate-300 mt-1 space-y-1 break-words">
+                                  <p>Destination: {t.institutionCountry ? destinationCountryName(t.institutionCountry) : "Country not supplied (legacy request)"}</p>
+                                  <p>Receiving account / portfolio ID: {t.institutionAccountNumber}</p>
+                                  {t.destinationDetails && <p className="whitespace-pre-wrap">Client-supplied destination details: {t.destinationDetails}</p>}
+                                  <p className="text-slate-400">Verify destination details and transfer support before approval or settlement confirmation.</p>
+                                </div>
+                                <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5 text-xs text-slate-400">
+                                  <span>Client: <span className="text-slate-300 font-medium">{t.userName}</span></span>
+                                  <span>·</span>
+                                  <span>{t.userEmail}</span>
+                                  <span>·</span>
+                                  <span>Acct #{t.accountId}</span>
+                                  <span>·</span>
+                                  <span>{new Date(t.createdAt).toLocaleDateString("en-CA")}</span>
+                                </div>
+                                <div className="mt-1.5 flex items-center gap-1.5 text-xs">
+                                  <span className="text-slate-400">Account holder:</span>
+                                  {t.accountHolderType === "other" && t.accountHolderName ? (
+                                    <span className="text-amber-300 font-semibold bg-amber-900/30 border border-amber-700/40 px-2 py-0.5 rounded-full">
+                                      Third party — {t.accountHolderName}
+                                    </span>
+                                  ) : (
+                                    <span className="text-emerald-300 font-medium bg-emerald-900/20 border border-emerald-700/30 px-2 py-0.5 rounded-full">
+                                      Own name
+                                    </span>
+                                  )}
+                                </div>
+                                {t.estimatedCompletionDate && (
+                                  <p className="text-xs text-emerald-400 mt-1 flex items-center gap-1">
+                                    <Clock className="w-3 h-3" />
+                                    Est. completion: {new Date(t.estimatedCompletionDate).toLocaleDateString("en-CA", { year: "numeric", month: "long", day: "numeric" })}
+                                  </p>
+                                )}
+                                {t.adminNotes && (
+                                  <p className="text-xs text-slate-500 mt-1 italic">Note: {t.adminNotes}</p>
+                                )}
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="border-primary/40 text-primary hover:bg-primary/10 gap-1.5 shrink-0"
+                                data-testid={`button-update-monitor-${t.id}`}
+                                onClick={() => {
+                                  setMonitorForm({
+                                    status: t.status,
+                                    estimatedCompletionDate: t.estimatedCompletionDate
+                                      ? new Date(t.estimatedCompletionDate).toISOString().split("T")[0]
+                                      : "",
+                                    adminNotes: t.adminNotes || "",
+                                  });
+                                  setMonitorDialog({ transfer: t });
+                                }}
+                              >
+                                <Activity className="w-3.5 h-3.5" />
+                                Update Monitor
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+          {/* ── Wire & Beneficiaries ── */}
+          <TabsContent value="wire" className="mt-4 space-y-4">
+
+            {/* Wire Update Dialog */}
+            <ShadDialog open={!!wireDialog} onOpenChange={(o) => { if (!o) setWireDialog(null); }}>
+              <ShadDialogContent className="bg-slate-800 border-slate-700 text-white max-w-md">
+                <ShadDialogHeader>
+                  <ShadDialogTitle className="flex items-center gap-2 text-white">
+                    <ArrowLeftRight className="w-4 h-4 text-primary" />
+                    Update Wire Transfer #{wireDialog?.txn?.id}
+                  </ShadDialogTitle>
+                  <p className="text-slate-400 text-xs mt-1">{wireDialog?.txn?.payeeName} · {wireDialog?.txn?.userName}</p>
+                </ShadDialogHeader>
+                <div className="space-y-4 py-2">
+                  <div className="space-y-2">
+                    <p className="text-xs uppercase tracking-widest text-slate-400 font-semibold">Status</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { value: "pending", label: "Pending", color: "border-amber-500/40 text-amber-400" },
+                        { value: "completed", label: "Completed", color: "border-emerald-500/40 text-emerald-400" },
+                        { value: "failed", label: "Rejected", color: "border-red-500/40 text-red-400" },
+                      ].map(opt => (
+                        <button key={opt.value} type="button"
+                          onClick={() => setWireForm(f => ({ ...f, status: opt.value }))}
+                          className={`rounded-lg border p-2.5 text-sm font-semibold transition-all ${wireForm.status === opt.value ? `${opt.color} bg-white/5` : "border-slate-600 text-slate-400 hover:border-slate-500"}`}>
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs uppercase tracking-widest text-slate-400 font-semibold">Admin Note <span className="normal-case text-slate-500">(optional)</span></label>
+                    <Textarea value={wireForm.adminNotes} onChange={e => setWireForm(f => ({ ...f, adminNotes: e.target.value }))}
+                      placeholder="e.g. Wire confirmed by compliance. Funds dispatched via SWIFT."
+                      className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-500 resize-none min-h-[72px]" />
+                  </div>
+                </div>
+                <ShadDialogFooter>
+                  <Button variant="ghost" className="text-slate-400 hover:text-white" onClick={() => setWireDialog(null)}>Cancel</Button>
+                  <Button className="bg-primary hover:bg-primary/90 text-white" disabled={updateWireMutation.isPending}
+                    onClick={() => {
+                      updateWireMutation.mutate({ id: wireDialog!.txn.id, status: wireForm.status, adminNotes: wireForm.adminNotes },
+                        { onSuccess: () => setWireDialog(null) });
+                    }}>
+                    Save Update
+                  </Button>
+                </ShadDialogFooter>
+              </ShadDialogContent>
+            </ShadDialog>
+
+            {/* ─ Beneficiary Approvals ─ */}
+            <Card className="bg-slate-800/40 border-slate-700">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-white text-base flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-primary" />
+                  Beneficiary Approvals
+                  {Array.isArray(allPayees) && allPayees.filter((p: any) => p.status === "pending_approval").length > 0 && (
+                    <span className="ml-1 bg-amber-500 text-white text-xs rounded-full px-2 py-0.5">
+                      {allPayees.filter((p: any) => p.status === "pending_approval").length} pending
+                    </span>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {payeesLoading ? (
+                  <div className="flex items-center justify-center py-8 text-slate-400"><RefreshCw className="w-4 h-4 animate-spin mr-2" />Loading…</div>
+                ) : (Array.isArray(allPayees) ? allPayees : []).length === 0 ? (
+                  <p className="text-center text-slate-400 py-8 text-sm">No beneficiaries registered yet</p>
+                ) : (
+                  <div className="space-y-2">
+                    {(Array.isArray(allPayees) ? allPayees : []).map((p: any) => {
+                      const isPending = p.status === "pending_approval";
+                      const isApproved = p.status === "approved";
+                      return (
+                        <div key={p.id} className={`rounded-lg border p-3.5 flex flex-col sm:flex-row sm:items-center gap-3 ${isPending ? "border-amber-500/30 bg-amber-500/5" : isApproved ? "border-emerald-500/20 bg-emerald-500/5" : "border-red-500/20 bg-red-500/5"}`}
+                          data-testid={`payee-admin-${p.id}`}>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-white font-semibold text-sm">{p.name}</span>
+                              <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded border ${isPending ? "border-amber-500/30 text-amber-400 bg-amber-500/10" : isApproved ? "border-emerald-500/30 text-emerald-400 bg-emerald-500/10" : "border-red-500/30 text-red-400 bg-red-500/10"}`}>
+                                {isPending ? "Pending" : isApproved ? "Approved" : "Rejected"}
+                              </span>
+                            </div>
+                            <p className="text-slate-400 text-xs mt-0.5">{p.bankName || "—"} · IBAN ****{p.accountNumber?.slice(-4)} · SWIFT {p.routingNumber || "—"}</p>
+                            <p className="text-slate-500 text-xs mt-0.5">Client: {p.userName} · {new Date(p.createdAt).toLocaleDateString("en-CA")}</p>
+                          </div>
+                          {isPending && (
+                            <div className="flex gap-2 shrink-0">
+                              <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1 h-8 text-xs"
+                                disabled={approvePayeeMutation.isPending || rejectPayeeMutation.isPending}
+                                onClick={() => approvePayeeMutation.mutate(p.id)}
+                                data-testid={`button-approve-payee-${p.id}`}>
+                                <CheckCircle2 className="w-3 h-3" /> Approve
+                              </Button>
+                              <Button size="sm" variant="outline" className="border-red-500/40 text-red-400 hover:bg-red-500/10 gap-1 h-8 text-xs"
+                                disabled={approvePayeeMutation.isPending || rejectPayeeMutation.isPending}
+                                onClick={() => rejectPayeeMutation.mutate(p.id)}
+                                data-testid={`button-reject-payee-${p.id}`}>
+                                <XCircle className="w-3 h-3" /> Reject
+                              </Button>
+                            </div>
+                          )}
+                          {!isPending && (
+                            <Button size="sm" variant="ghost" className="text-slate-400 hover:text-white h-8 text-xs shrink-0"
+                              onClick={() => approvePayeeMutation.mutate(p.id)}>
+                              {isApproved ? "Re-approve" : "Approve"}
+                            </Button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* ─ Wire Disbursement Monitor ─ */}
+            <Card className="bg-slate-800/40 border-slate-700">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-white text-base flex items-center gap-2">
+                  <ArrowLeftRight className="w-4 h-4 text-primary" />
+                  Wire Disbursements
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {wireLoading ? (
+                  <div className="flex items-center justify-center py-8 text-slate-400"><RefreshCw className="w-4 h-4 animate-spin mr-2" />Loading…</div>
+                ) : (Array.isArray(wireTransfers) ? wireTransfers : []).length === 0 ? (
+                  <p className="text-center text-slate-400 py-8 text-sm">No wire disbursements submitted yet</p>
+                ) : (
+                  <div className="space-y-2">
+                    {(Array.isArray(wireTransfers) ? wireTransfers : []).map((t: any) => {
+                      const statusColors: Record<string, string> = {
+                        pending: "border-amber-500/30 bg-amber-500/5",
+                        completed: "border-emerald-500/20 bg-emerald-500/5",
+                        failed: "border-red-500/20 bg-red-500/5",
+                      };
+                      const statusBadge: Record<string, string> = {
+                        pending: "border-amber-500/30 text-amber-400",
+                        completed: "border-emerald-500/30 text-emerald-400",
+                        failed: "border-red-500/30 text-red-400",
+                      };
+                      return (
+                        <div key={t.id} className={`rounded-lg border p-3.5 flex flex-col sm:flex-row sm:items-start gap-3 ${statusColors[t.status] || statusColors.pending}`}
+                          data-testid={`wire-txn-admin-${t.id}`}>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-white font-semibold text-sm font-mono">WT-{t.id}</span>
+                              <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded border ${statusBadge[t.status] || statusBadge.pending}`}>
+                                {t.status === "failed" ? "Rejected" : t.status}
+                              </span>
+                            </div>
+                            <p className="text-slate-200 text-sm mt-0.5">To: {t.payeeName}</p>
+                            <div className="flex flex-wrap gap-x-3 text-xs text-slate-400 mt-0.5">
+                              <span>Client: <span className="text-slate-300">{t.userName}</span></span>
+                              <span>·</span>
+                              <span>CAD <strong className="text-white">${Number(t.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong></span>
+                              <span>·</span>
+                              <span>{new Date(t.createdAt).toLocaleDateString("en-CA")}</span>
+                            </div>
+                            {t.adminNotes && <p className="text-slate-500 text-xs mt-1 italic">Note: {t.adminNotes}</p>}
+                          </div>
+                          <Button size="sm" variant="outline"
+                            className="border-primary/40 text-primary hover:bg-primary/10 gap-1.5 shrink-0 h-8 text-xs"
+                            data-testid={`button-update-wire-${t.id}`}
+                            onClick={() => { setWireForm({ status: t.status, adminNotes: t.adminNotes || "" }); setWireDialog({ txn: t }); }}>
+                            <Activity className="w-3 h-3" /> Update
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+        </Tabs>
+      </div>
+    </div>
+  );
+}
+
+// ─── Admin Page (entry point) ─────────────────────────────────────────────────
+export default function AdminPage() {
+  const [session, setSession] = useState<AdminAuthSession | null>(null);
+
+  const handleLogin = (nextSession: AdminAuthSession) => setSession(nextSession);
+
+  const handleLogout = () => {
+    setSession(null);
+  };
+
+  if (!session) return <AdminLogin onLogin={handleLogin} />;
+  return (
+    <AdminDashboard
+      adminKey={session.token}
+      currentStaff={session.staff}
+      legacyKeyMode={session.legacyKeyMode}
+      onLogout={handleLogout}
+    />
+  );
+}

@@ -1,0 +1,61 @@
+2026-10-19T10:15:46.366976161Z ==> Cloning from https://gitlab.com/hdkcm/VeritasOrg
+2026-10-19T10:15:53.981197311Z ==> Checking out commit 17f128bc366cd92aa829f6f14585272ce0208970 in branch main
+2026-10-19T10:15:55.195704132Z ==> Using Node.js version 24.21.0 via environment variable NODE_VERSION
+2026-10-19T10:15:55.195707992Z ==> Docs on specifying a Node.js version: https://render.com/docs/node-version
+2026-10-19T10:15:55.226775723Z ==> Running build command 'npm ci && npm run build'...
+2026-10-19T10:16:03.159744593Z 
+2026-10-19T10:16:03.15976614Z added 467 packages, and audited 468 packages in 8s
+2026-10-19T10:16:03.159775175Z 
+2026-10-19T10:16:03.15987202Z 57 packages are looking for funding
+2026-10-19T10:16:03.159955104Z   run `npm fund` for details
+2026-10-19T10:16:03.228920802Z 
+2026-10-19T10:16:03.228939659Z 26 vulnerabilities (1 low, 6 moderate, 19 high)
+2026-10-19T10:16:03.228941414Z 
+2026-10-19T10:16:03.228943455Z To address issues that do not require attention, run:
+2026-10-19T10:16:03.228945115Z   npm audit fix
+2026-10-19T10:16:03.228946359Z 
+2026-10-19T10:16:03.228947796Z To address all issues (including breaking changes), run:
+2026-10-19T10:16:03.228949627Z   npm audit fix --force
+2026-10-19T10:16:03.228951223Z 
+2026-10-19T10:16:03.228952872Z Run `npm audit` for details.
+2026-10-19T10:16:03.388933436Z 
+2026-10-19T10:16:03.388952108Z > veritas-wealth@1.0.0 build
+2026-10-19T10:16:03.388955776Z > NODE_ENV=production tsx script/build.ts
+2026-10-19T10:16:03.388957979Z 
+2026-10-19T10:16:03.990509277Z building client...
+2026-10-19T10:16:04.050782363Z vite v7.3.0 building client environment for production...
+2026-10-19T10:16:04.504014467Z transforming...
+2026-10-19T10:16:04.52716462Z Browserslist: browsers data (caniuse-lite) is 10 months old. Please run:
+2026-10-19T10:16:04.52717289Z   npx update-browserslist-db@latest
+2026-10-19T10:16:04.52717491Z   Why you should do it regularly: https://github.com/browserslist/update-db#readme
+2026-10-19T10:16:04.604109576Z ✓ 3 modules transformed.
+2026-10-19T10:16:04.604523188Z ✗ Build failed in 384ms
+2026-10-19T10:16:04.604838933Z [vite:css] [postcss] Cannot find module '@tailwindcss/typography'
+2026-10-19T10:16:04.604841723Z Require stack:
+2026-10-19T10:16:04.604843794Z - /opt/render/project/src/tailwind.config.ts
+2026-10-19T10:16:04.604845683Z file: /opt/render/project/src/client/index.html?html-proxy&inline-css&index=0.css:undefined:NaN
+2026-10-19T10:16:04.60484714Z     at node:internal/modules/cjs/loader:1564:15
+2026-10-19T10:16:04.604848951Z     at nextResolveSimple (/opt/render/project/src/node_modules/tsx/dist/register-D46fvsV_.cjs:4:1004)
+2026-10-19T10:16:04.604850399Z     at /opt/render/project/src/node_modules/tsx/dist/register-D46fvsV_.cjs:3:2630
+2026-10-19T10:16:04.604851913Z     at /opt/render/project/src/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1542
+2026-10-19T10:16:04.604853387Z     at resolveTsPaths (/opt/render/project/src/node_modules/tsx/dist/register-D46fvsV_.cjs:4:760)
+2026-10-19T10:16:04.604854787Z     at /opt/render/project/src/node_modules/tsx/dist/register-D46fvsV_.cjs:4:1102
+2026-10-19T10:16:04.604856243Z     at m._resolveFilename (file:///opt/render/project/src/node_modules/tsx/dist/register-B7jrtLTO.mjs:1:789)
+2026-10-19T10:16:04.604866091Z     at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+2026-10-19T10:16:04.604867629Z     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+2026-10-19T10:16:04.604869325Z     at require.resolve (node:internal/modules/helpers:175:31) {
+2026-10-19T10:16:04.60487107Z   code: 'PLUGIN_ERROR',
+2026-10-19T10:16:04.604872522Z   requireStack: [ '/opt/render/project/src/tailwind.config.ts' ],
+2026-10-19T10:16:04.604877231Z   loc: { file: undefined, line: undefined, column: NaN },
+2026-10-19T10:16:04.604878551Z   pluginCode: '[data-startup-loader] { display: none; }',
+2026-10-19T10:16:04.604879858Z   plugin: 'vite:css',
+2026-10-19T10:16:04.604881156Z   hook: 'transform',
+2026-10-19T10:16:04.604882594Z   id: '/opt/render/project/src/client/index.html?html-proxy&inline-css&index=0.css',
+2026-10-19T10:16:04.604883811Z   watchFiles: [
+2026-10-19T10:16:04.604901794Z     '/opt/render/project/src/client/index.html',
+2026-10-19T10:16:04.604905516Z     '/opt/render/project/src/client/src/main.tsx',
+2026-10-19T10:16:04.604906779Z     '/opt/render/project/src/package.json'
+2026-10-19T10:16:04.604908058Z   ]
+2026-10-19T10:16:04.6049094Z }
+2026-10-19T10:16:04.664773033Z ==> Build failed 😞
+2026-10-19T10:16:04.664778951Z ==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys

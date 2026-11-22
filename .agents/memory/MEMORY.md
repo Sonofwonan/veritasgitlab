@@ -1,0 +1,22 @@
+- [Design Identity](design-identity.md) — Approved "Old Money, Digital Precision" visual system: Cormorant serif, forest green + cream + gold, near-zero radius, underline inputs, editorial layout.
+- [Business positioning](business-positioning.md) — Global private offshore wealth management, not a Canadian institution; currencies do not imply regulatory status.
+- [Supabase hosting](supabase-hosting.md) — Keep this app on its existing Supabase database when deploying the server to another host.
+- [Application password retention](application-password-retention.md) — Legacy application password hashes remain stored but are not used; do not erase them without explicit approval.
+- [Balance display](balance-display.md) — Full digits and separate overdrafts; CAD by default, with Mary Scott using only £ and unchanged numeric amounts.
+- [Fictional test records](fictional-test-records.md) — Mary Scott is fictional test data; use normal screens without a visible demo label, preserving internal test provenance.
+- [Account fee authorization](account-fee-authorization.md) — Approved CAD annual pricing and fictional-history scope; preserve real clients’ accepted cash-only terms.
+- [Post-merge safety](post-merge-safety.md) — Automatic setup may update schema and build, but must never seed clients, backfill fictional history, or process billing.
+- [Browser regression isolation](browser-test-safety.md) — Financial browser tests must use disposable identities and normal login; keep shared records untouched and use Nix-packaged Chromium.
+- [Financial responsive layouts](financial-responsive-layout.md) — Verify tablet/sidebar widths too; phone and desktop passes can hide overlapping balances and controls.
+- [Performance evidence](performance-evidence.md) — Stored numeric prices are not verified market evidence; deposits and fee liabilities must never imply investment gains.
+- [Navigation collapse](navigation-collapse.md) — Client side menu and top settings bar start collapsed; only deliberate user actions open them.
+- [Diagnostic runtime safety](diagnostic-runtime-safety.md) — One-off language commands can add unwanted runtimes; use the project's existing runtime for diagnostics.
+- [External build lockfiles](external-build-lockfiles.md) — Replace Replit-only package tarball URLs before external CI, preserving locked versions and integrity hashes.
+- [Plain-language interface](plain-language-ui.md) — Simple client wording, real transaction-history links and advisor-directed payment popups; preserve terms and access rules.
+- [Historical cash evidence](account-history-evidence.md) — Legacy completed rows may not represent cash movements; never infer historical balances from today's balance.
+- [Authenticator key rotation](security-key-rotation.md) — Re-encrypt authenticator secrets before replacing their encryption root; session-key rotation must not lock clients out.
+- [Recovery-code approval](recovery-code-approval.md) — Clients request codes; only admins issue them after identity verification, including the initial set.
+- [Authenticator grace policy](authenticator-grace-policy.md) — User approved 60-second server tolerance; keep 30-second rotation, single-use protections and unchanged challenge lifetimes.
+- [Cross-origin security](browser-origin-policy.md) — Same-origin passes do not prove deployed sign-in works; verify credentialed flows from every approved frontend.
+- [Financial snapshot consistency](financial-snapshot-consistency.md) — Keep dashboard cash and liabilities in one committed snapshot and one cache entry through financial changes.
+- [General-client debt naming](general-client-debt-naming.md) — Approved “Total owed” label for combined debt; never attribute overdrafts to fees without evidence.

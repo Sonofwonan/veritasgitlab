@@ -1,0 +1,6 @@
+{
+  "name": "Veritas Wealth",
+  "description": "Global private offshore wealth management for individuals, families and institutions with international financial interests.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

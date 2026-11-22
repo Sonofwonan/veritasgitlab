@@ -1,0 +1,136 @@
+---
+name: Balance display
+description: Full-digit balances, default CAD, Mary Scott's symbol-only £ exception, and separate overdrafts.
+---
+
+Every account must be identified by its account name, including debt breakdowns and selectors, rather than a number-only “Account #…” label.
+
+**Why:** The user repeatedly corrected the fee-debt display, explicitly rejecting “Account #25” and requiring the specific account name.
+
+**How to apply:** Use the account's display name or account type in client and administrative views. Keep IDs for routing and internal reconciliation, not as substitutes for names. The compact Accounts debt summary is a user-requested exception: names stay accessible but visually hidden, with permanent masked numbers distinguishing multiple owing accounts.
+
+Show balances in full digits, not abbreviated million notation such as "$2.80M".
+
+**Why:** The user said abbreviated totals do not make sense and must be shown in full digits.
+
+**How to apply:** Preserve full amounts when formatting account and portfolio balances, including on mobile.
+
+Keep other clients in CAD unless an administrator deliberately authorizes a presentation-only exception. Existing service-pricing plans remain in their recorded currency. Mary Scott's account balances use £, retaining their existing numeric amounts.
+
+**Why:** The user originally requested CAD throughout, then explicitly requested Mary Scott's balance/account in pounds and chose “Keep the same amounts; change the currency to £.” The authorized staff workflow extends this presentation-only designation without changing settlement or accepted pricing.
+
+**How to apply:** Remove CAD wording from all Mary's client-facing balance, fee, transaction and statement views; use only £, never GBP on her dashboard. Stored financial records and shared accepted pricing remain unchanged. Staff must still see pricing in its recorded currency, and cross-client totals must be identified as ledger totals rather than sums of differently labelled display figures. Do not relabel a CAD/USD market quote as GBP/USD; omit it from her view rather than inventing an exchange rate. Do not change unrelated clients' currencies.
+
+Avoid a standalone £ in Mary's balance/date caption or dashboard footer; the amounts already show their currency.
+
+**Why:** The user circled the extra £ beside the date and asked to replace it with something user-friendly.
+
+**How to apply:** Keep the caption as “Total balance · [date]” and use “Last updated [date]” in the footer, without duplicating the symbol.
+
+Omit standalone currency prefixes from Mary's transaction descriptions, such as “£ monthly service fee”; keep £ on the transaction amounts.
+
+**Why:** The user circled the description prefixes and explicitly requested their removal.
+
+**How to apply:** Apply a read-only transaction-description presentation rule consistently to history, transaction details and statement exports. Preserve stored descriptions, numeric amounts and other clients' CAD presentation.
+
+Client-facing generated fee descriptions should use the plain service name, without assessment numbering, duplicate dates or “Authorized fee overdraft” suffixes. Show the transaction date separately once.
+
+**Why:** The user said the monthly service fee description with its date, assessment number and funding-method text “make no sense and that numbering is not needed”.
+
+**How to apply:** Clean the presentation of known generated fee descriptions across history, activity, dialogs and client exports. Keep meaningful fee/refund types, original stored descriptions and audit references; do not strip numbers from unrelated transaction text.
+
+Currency-symbol exceptions are explicit designations, not client-controlled profile preferences.
+
+**Why:** Letting ordinary clients change the presentation symbol would make unconverted CAD ledger amounts appear to be pounds and violate the instruction to leave other clients in CAD.
+
+**How to apply:** Reject client profile requests to change display currency. Any future staff currency workflow must separately authorize the designation and retain the stated no-conversion boundary.
+
+The CAD service-fee schedule is nominal pricing, not an exchange-rate conversion of the copied GBP example.
+
+**Why:** The approved fee plan adopted CAD pricing and explicitly excluded foreign-exchange conversion and claims that the example represents typical bank fees.
+
+**How to apply:** Do not describe this service pricing as converted GBP pricing or verified market-standard bank charges.
+
+Do not normalize existing ledger balances merely to satisfy cent-precision fees; valid fractional-cent proceeds must be preserved.
+
+**Why:** The account ledger permits fractional cents, so a strict two-decimal preview can fail while PostgreSQL settlement still processes a fee. Rounding stored cash would change customers' funds.
+
+**How to apply:** Keep fee amounts in exact cents, compare available cash conservatively without rewriting it, and verify preview and settlement agree at fractional-cent boundaries.
+
+Show unpaid service-fee debt on the dashboard and account summaries, not only in fee history, including negative net balances when fees exceed assets.
+
+**Why:** The user said they could not see the fees on the dashboard and that they must appear there or as a negative account amount.
+
+**How to apply:** Distinguish cash ledger balance from net balance after genuinely unposted unpaid fees. Posted overdraft debits already reduced cash; never subtract them again. Neither unposted fees nor authorized fee overdrafts accrue interest.
+
+Each account must have its own fees, overdrafted from that respective account, rather than only a separate unpaid-fee display.
+
+**Why:** The user explicitly said, “Each account must have fees and all this fees must be overdrafted from their respective accounts.”
+
+**How to apply:** Implement actual negative fee-funded ledger balances under explicit account-level authorization. Preserve previously accepted terms; never subtract already-posted fee debt a second time from net worth.
+
+For discretionary management, an annual minimum must continue after investments are liquidated if the management contract stays open, including on the fictional Mary Scott profile.
+
+**Why:** The user requested that this continuing management fee increase Mary's debt beyond the previous Trust-only fees.
+
+**How to apply:** Model contract termination separately from zero holdings. Confirm exact CAD pricing, annual AUM rate, and whether the minimum is additional to monthly fees before posting new charges; do not infer overdraft interest.
+
+Show current funded balances as the main balance on client summary screens, with overdraft debt separately. An investment-account type does not turn cash into investment holdings; exclude debt from investment/asset summaries.
+
+**Why:** The user rejected netting the overdraft against available balances and later flagged the Accounts page showing the Brokerage overdraft as Investments.
+
+**How to apply:** Include all remaining positive cash balances across accounts and current holdings, not only the inheritance account or original deposit, separately from named account liabilities. Cash held in Brokerage or retirement accounts remains cash; investment summaries must use holdings, not account types. Individual account balances and displayed account-type group totals use signed actual cash balances, separately from the funded headline; do not clamp a debt-only group to zero. Preserve the negative account ledger and its debt breakdown without subtracting it or unpaid assessments from the main funded-balance headline. Distinguish an original deposit transaction from the account's changing current balance.
+
+For the inheritance deposit, show its date and amount in transaction history; on the dashboard show current balances and the total rather than a separate original-deposit figure.
+
+**Why:** The user clarified that transaction history must show the deposit date and the balance should be reflected in the dashboard or total balance.
+
+**How to apply:** Preserve the dated deposit entry, include its effect once in current totals, and retain separate overdraft identification without adding an original-inheritance-amount dashboard card.
+
+Present dashboard debt as an ordinary, simple account balance card: amount owed once, the full account name and access to details, not a warning notice or long fee/ledger explanation. A restriction notice belongs separately and only after a confirmed administrative restriction specifically for debt.
+
+**Why:** The user repeatedly rejected lengthy explanations and duplicated amounts, then clarified that debt should look like a normal credit-account balance rather than a notice.
+
+**How to apply:** Change presentation without changing debt, fee contracts, separate funded-balance accounting or existing funds locks. Do not infer an admin debt restriction from debt alone, a generic freeze or a historical funds-lock flag without explicit admin confirmation. Keep the verified separate Brokerage payment requirement for existing restricted funds.
+
+Historical funds-lock policy and an administrator-confirmed restriction reason are distinct. Do not backfill administrative provenance just to make a notice appear, and withdrawing a notice must never count as releasing funds or verifying payment.
+
+**Why:** Existing fictional lock policies were established during account setup, without evidence of a separate administrator restriction decision. The user now wants restriction notices only after that decision, while preserving the existing payment requirement.
+
+**How to apply:** Preserve old enforcement even when reason evidence is unavailable. Require an explicit audited admin confirmation for notice attribution; keep financial clearance independent.
+
+An administrative debt notice is not a permanent user designation. A payment, credit or fee reduction invalidates its confirmation; any still-active or renewed restriction needs a fresh admin notice decision.
+
+**Why:** A user-wide confirmation could otherwise reappear when new debt locks the same account after earlier debt was cleared, falsely implying a new administrative restriction decision.
+
+**How to apply:** Bind confirmation to its clearance evidence and retire it when clearance is observed. Qualifying payment/fee history changes only the notice's validity; it must never independently release funds or modify debt.
+
+In dashboard account previews and Accounts cards, show an overdrawn account's full name and signed negative account balance once, rather than a positive magnitude with an overdraft suffix or a duplicate debt note.
+
+**Why:** The user first rejected duplicate debt figures, then explicitly requested the minus sign like a normal bank balance and objected to an overdrawn account appearing as £0.00.
+
+**How to apply:** Keep the actual negative ledger balance unchanged and display it with its minus sign. Keep genuinely unpaid fees separate and preserve the separate top-summary overdraft identification; never make the funded total negative by netting debt into it.
+
+Use different compact debt captions on the two overview screens: Dashboard keeps the account name without “Amount owed”; Accounts keeps “Amount owed” without a visible account-name heading. Neither debt summary has a details link beneath the figure. Dashboard debt and actual negative account balances are signed and red; Accounts “Amount owed” is positive and black (readable neutral text in dark mode).
+
+**Why:** The user initially requested negative red debt figures, then explicitly corrected Accounts “Amount owed” to black without a negative sign and rejected duplicate figures beside category headings.
+
+**How to apply:** Preserve normal account names and detail navigation in the account list. Category headings show names and counts only, not repeated totals; individual account rows retain their actual signed balances. Visually simplifying the debt summary must not remove accessible account identification or alter financial records.
+
+The dashboard combined debt figure presents total still owed, including debt already posted as overdraft, rather than only assessments awaiting deduction. Its approved general-client label is now “Total owed” (see general-client-debt-naming.md).
+
+**Why:** The user rejected a zero unpaid-fees figure while an overdraft still required payment and asked for the corresponding negative red amount.
+
+**How to apply:** Both dashboard debt figures refer to existing liabilities, not two charges. Preserve the internal distinction between posted overdraft and unposted assessments; never double-count them or deduct debt from funded totals again.
+
+Use plain-language overdraft highlights on account detail and account summary screens too, without technical ledger explanations or repeated amounts.
+
+**Why:** The user again rejected the account-page notice: “the notice should simply highlight an overdraft” and “all that jargons there is unnecessary”.
+
+**How to apply:** Identify the named account and amount owed clearly. Omit zero-fee lines and duplicate overdraft figures, while keeping genuinely unpaid fees distinct and preserving all financial balances and access restrictions.
+
+Explain an existing debt restriction in a short popup when a client deliberately clicks Transfer or Invest, rather than leaving an unexplained disabled entry control.
+
+**Why:** The user requested “Transfers and investing are blocked until your account debt is cleared,” and rejected persistent “Review accounts” prompts and unconfirmed restriction-detail placeholders.
+
+**How to apply:** Do not infer a new hold or an administrator's decision from debt alone. Keep payment-verification-only locks distinct from outstanding debt, and failed access checks blocked without claiming an unsupported debt reason.

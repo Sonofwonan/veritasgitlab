@@ -1,0 +1,65 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "hphU6GJUGJQz5pmmmjUcN"
+uri = "file://veritas_historical_seed.tar.gz"
+type = "unspecified"
+title = "Veritas Historical Data SQL (2015–2026)"
+logical_id = "78a79d0e-e5f4-417c-8589-ba48539d2f9f"
+
+[[outputs]]
+id = "O55yIAgVVl7rpm6TDgbPr"
+uri = "file://test-results/balances/runs/balances-normal-login-fund-7c7d1--and-sixth-positive-account-desktop/signed-in-funded-balance-and-debt.png"
+type = "image"
+title = "Signed-in desktop balance check"
+description = "Isolated fictional client: funded cash plus holdings above, named fee debt and negative ledger below."
+logical_id = "c8c5604d-4d39-49af-a913-f95d3a34ef3d"
+content_hash = "sha256:44cdb98546f4cfed2f0f52ec22dafbb93fd0564fce100c61853125591344761c"
+size = 164190
+mtime_ms = 1791552394800
+storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:fbae4b85-6efb-42af-9c4c-30c8c40979d9/c8c5604d-4d39-49af-a913-f95d3a34ef3d/0630adc7-8694-40dd-99e9-3a6e030e1464"
+storage_version_token = "1791552779978534"
+content_type = "image/png"
+
+[[outputs]]
+id = "FFTU79T0hzpgTAa-DA3Sj"
+uri = "file://test-results/balances/runs/balances-normal-login-fund-7c7d1--and-sixth-positive-account-mobile/signed-in-funded-balance-and-debt.png"
+type = "image"
+title = "Signed-in mobile balance check"
+description = "360-pixel viewport with full-digit CAD funded balance and separate named debt."
+logical_id = "5e8eda2a-d1bb-4b7a-a3f1-a895b3a851a9"
+content_hash = "sha256:1f56e8157d6a9408b17cd8bca46c1b10be8dfb1fdbb9db67b7a840945c00b9ae"
+size = 70744
+mtime_ms = 1791552438328
+storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:fbae4b85-6efb-42af-9c4c-30c8c40979d9/5e8eda2a-d1bb-4b7a-a3f1-a895b3a851a9/116d1887-2837-4f33-9ab7-0c5b15cf141f"
+storage_version_token = "1791552780587227"
+content_type = "image/png"
+
+[[outputs]]
+id = "EGEEBsHrJIZeVHzsiisiY"
+uri = "file://client/public/icons/veritas-512.png"
+type = "image"
+title = "Veritas app icon"
+description = "512 × 512 home-screen icon using your supplied logo."
+logical_id = "b215251c-0d7e-40f1-853a-55df2227d021"
+content_hash = "sha256:8f41299ab2344956ae09aec6299f7199daf6b84190de4bbc089a17299c116cc8"
+size = 135231
+mtime_ms = 1791917036981
+storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:fbae4b85-6efb-42af-9c4c-30c8c40979d9/b215251c-0d7e-40f1-853a-55df2227d021/d65687dd-6002-4fde-a4c5-8f863fcc6860"
+storage_version_token = "1791917189740898"
+content_type = "image/png"
+
+[[outputs]]
+id = "47-TN-JzbAyvtziPl1js7"
+uri = "file://client/public/veritas-logo.png"
+type = "image"
+title = "Transparent Veritas logo"
+description = "Your supplied logo with a transparent background, ready to download."
+logical_id = "626b6aae-3c8f-4438-9cfe-73e63f11415b"
+content_hash = "sha256:750a1b6d4ade456a572776411a89126ff62c47c1f47fcf5482a33df4a4159dea"
+size = 204661
+mtime_ms = 1791917036957
+storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:fbae4b85-6efb-42af-9c4c-30c8c40979d9/626b6aae-3c8f-4438-9cfe-73e63f11415b/595e0ff1-08a4-40e9-a1df-29352d1219ca"
+storage_version_token = "1791917784539424"
+content_type = "image/png"

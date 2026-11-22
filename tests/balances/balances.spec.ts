@@ -1,0 +1,423 @@
+import { test, expect, login, verifyHeadline, HEADLINE } from "./fixtures";
+import type { Page, TestInfo } from "@playwright/test";
+import { readFile } from "node:fs/promises";
+
+async function evidence(page: Page, info: TestInfo, name: string) {
+  const path = info.outputPath(`${name}.png`);
+  await page.screenshot({ path, fullPage: true });
+  await info.attach(name, { path, contentType: "image/png" });
+}
+
+test.beforeEach(async ({ page }) => {
+  // Keep every request local, including failures/malformed-response scenarios.
+  await page.route("**/api/**", async route => {
+    const url = new URL(route.request().url());
+    expect(url.origin).toBe(process.env.BALANCE_E2E_URL);
+    await route.continue();
+  });
+});
+
+test.afterEach(async ({ page }, info) => {
+  if (!page.isClosed()) await evidence(page, info, "final-browser-state");
+});
+
+test("Accounts balances stay horizontal and unclipped across phone and tablet widths", async ({page,identity,db},info) => {
+  for (const currency of ["GBP","CAD"]) {
+    await page.request.post("/api/logout");
+    await db.query("UPDATE users SET display_currency=$1 WHERE id=$2",[currency,identity.userId]);
+    await login(page,identity);
+    await page.goto("/accounts");
+    const headline=page.getByTestId("text-total-balance");
+    await expect(headline).toContainText(currency==="GBP"?"£":"CAD $");
+    const savedTotal=await headline.innerText();
+    for (const width of [320,375,390,430,640,768,1024,1440]) {
+      await page.setViewportSize({width,height:900});
+      await page.evaluate(()=>document.fonts.ready);
+      await expect(headline).toHaveText(savedTotal);
+      const money=page.locator('[data-testid="text-total-balance"],[data-testid^="balance-"],p.whitespace-nowrap.font-mono.text-amber-400,[data-testid="text-net-account-balance"],[data-testid="text-fee-overdraft"] span');
+      for (const node of await money.all()) {
+        const metrics=await node.evaluate(element=>{
+          const range=document.createRange();
+          range.selectNodeContents(element);
+          const rects=Array.from(range.getClientRects()).filter(r=>r.width>0 && r.height>0);
+          const topLines=new Set(rects.map(r=>Math.round(r.top)));
+          const right=Math.max(...rects.map(r=>r.right));
+          let clipped=false;
+          for(let parent=element.parentElement;parent;parent=parent.parentElement){
+            if(["hidden","clip"].includes(getComputedStyle(parent).overflowX) &&
+              right>parent.getBoundingClientRect().right+1) clipped=true;
+          }
+          return {text:element.textContent,lines:topLines.size,right,clipped};
+        });
+        expect(metrics.lines,`${currency} ${width}px: ${metrics.text}`).toBe(1);
+        expect(metrics.right,`${currency} ${width}px: amount extends past viewport`).toBeLessThanOrEqual(width);
+        expect(metrics.clipped,`${currency} ${width}px: clipped amount`).toBe(false);
+      }
+      const totalBox=await headline.boundingBox();
+      const controlBox=await page.getByTestId("button-open-account").boundingBox();
+      const overlap=totalBox!.x<controlBox!.x+controlBox!.width &&
+        totalBox!.x+totalBox!.width>controlBox!.x &&
+        totalBox!.y<controlBox!.y+controlBox!.height &&
+        totalBox!.y+totalBox!.height>controlBox!.y;
+      expect(overlap,`${currency} ${width}px: controls overlap balance`).toBe(false);
+      expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),
+        `${currency} ${width}px: page scrolls sideways`).toBe(false);
+      if (currency==="GBP" && [390,768,1440].includes(width)) {
+        await evidence(page,info,`accounts-layout-${width}`);
+      }
+    }
+    await page.setViewportSize({width:390,height:900});
+    await page.getByTestId("button-toggle-balances").click();
+    await expect(headline).toContainText("•");
+    await page.getByTestId("button-toggle-balances").click();
+    await expect(headline).toHaveText(savedTotal);
+    await page.getByTestId("button-open-account").click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toBeHidden();
+  }
+});
+
+test("dashboard account previews show complete names and one overdraft amount", async ({page,identity,db},info) => {
+  const longName="Inheritance Trust Account — Family Farm Proceeds";
+  await db.query("UPDATE accounts SET display_name=$1 WHERE id=$2 AND user_id=$3",
+    [longName,identity.funded,identity.userId]);
+  for (const currency of ["GBP","CAD"]) {
+    await db.query("UPDATE users SET display_currency=$1 WHERE id=$2",[currency,identity.userId]);
+    // Stop detail-page polling before ending its session for the next currency.
+    await page.goto("about:blank");
+    await page.request.post("/api/logout");
+    await login(page,identity);
+    const card=page.getByTestId(`dash-account-${identity.debt}`);
+    const money=currency==="GBP"?"-£1,250.75":"CAD -$1,250.75";
+    await expect(page.getByTestId(`dash-account-balance-${identity.debt}`)).toHaveText(money);
+    await expect(card).toContainText(money);
+    await expect(card).not.toContainText(" cash");
+    await expect(card).not.toContainText("Cash ledger overdraft");
+    expect((await card.innerText()).split(money).length-1).toBe(1);
+    for (const width of [320,390,768,1024,1280,1440]) {
+      await page.setViewportSize({width,height:1000});
+      await page.evaluate(()=>document.fonts.ready);
+      for (const id of [identity.debt,identity.funded]) {
+        const name=page.getByTestId(`dash-account-name-${id}`);
+        await expect(name).toHaveText(id===identity.debt?"Fee Reserve Trust":longName);
+        const visible=await name.evaluate(element=>{
+          const box=element.getBoundingClientRect();
+          return {width:box.width,clipped:element.scrollWidth>element.clientWidth+1,
+            truncated:getComputedStyle(element).textOverflow==="ellipsis"};
+        });
+        expect(visible.width,`${currency} ${width}px: name squeezed out`).toBeGreaterThan(80);
+        expect(visible.clipped,`${currency} ${width}px: name clipped`).toBe(false);
+        expect(visible.truncated).toBe(false);
+        const amount=page.getByTestId(`dash-account-balance-${id}`);
+        const bounds=await amount.evaluate(element=>{
+          const range=document.createRange();
+          range.selectNodeContents(element);
+          const rectangles=Array.from(range.getClientRects());
+          const card=element.closest("button")!.getBoundingClientRect();
+          return {lines:new Set(rectangles.map(r=>Math.round(r.top))).size,
+            overflow:rectangles.some(r=>r.right>card.right+1)};
+        });
+        expect(bounds.lines,`${currency} ${width}px: amount wrapped`).toBe(1);
+        expect(bounds.overflow,`${currency} ${width}px: amount clipped`).toBe(false);
+      }
+      if (currency==="GBP" && [390,1024].includes(width)) {
+        await card.scrollIntoViewIfNeeded();
+        await evidence(page,info,`dashboard-account-preview-${width}`);
+      }
+    }
+    await card.click();
+    await expect(page).toHaveURL(new RegExp(`/accounts/${identity.debt}$`));
+  }
+  const {rows:[account]}=await db.query("SELECT balance FROM accounts WHERE id=$1 AND user_id=$2",
+    [identity.debt,identity.userId]);
+  expect(account.balance).toBe("-1250.75");
+});
+
+test("normal login, funded headline, named debt, negative accounts and sixth positive account", async ({ page, identity }, info) => {
+  await login(page, identity);
+  await verifyHeadline(page);
+  await expect(page.getByTestId("text-liquid-cash")).toHaveText("CAD $2,001,400.25");
+  await expect(page.getByTestId("text-investment-value")).toHaveText("CAD $2,500.00");
+  await expect(page.getByTestId(`debt-account-amount-${identity.debt}`)).toHaveText("CAD -$1,614.39");
+  const debt = page.getByTestId("debt-account-summary");
+  const link = page.getByTestId(`debt-account-details-${identity.debt}`);
+  await expect(link).toHaveCount(0);
+  await expect(debt).toContainText("Fee Reserve Trust");
+  await expect(debt).not.toContainText("negative cash ledger");
+  const headlineBox = await page.getByTestId("text-total-balance").boundingBox();
+  const debtBox = await debt.boundingBox();
+  expect(debtBox!.y).toBeGreaterThan(headlineBox!.y);
+  await expect(page.getByTestId(`dash-account-${identity.debt}`)).toContainText("CAD -$1,250.75");
+  await expect(page.getByTestId(`dash-account-${identity.extra}`)).toContainText("$500.00");
+  await evidence(page, info, "signed-in-funded-balance-and-debt");
+  // The sixth account is not in the dashboard's five-row preview but must count.
+  await page.getByTestId("button-quick-accounts").click();
+  await expect(page.getByTestId(`balance-${identity.sixth}`)).toHaveText("CAD $125.00");
+  await expect(page.getByTestId(`balance-${identity.debt}`)).toHaveText("CAD -$1,250.75");
+  await expect(page.getByTestId(`account-balance-label-${identity.debt}`)).toHaveCount(0);
+  await page.getByTestId(`balance-${identity.debt}`).scrollIntoViewIfNeeded();
+  await expect(page.getByTestId(`balance-${identity.debt}`)).toBeVisible();
+  await evidence(page, info, "negative-individual-account-balance");
+  await page.goto("/dashboard");
+  await verifyHeadline(page);
+  await page.getByTestId(`dash-account-${identity.debt}`).click();
+  await expect(page).toHaveURL(new RegExp(`/accounts/${identity.debt}$`));
+  await expect(page.getByRole("heading", { name: "Fee Reserve Trust", exact: true })).toBeVisible();
+  await expect(page.getByTestId("text-account-cash-balance")).toHaveText("CAD -$1,250.75");
+  await page.goto("/dashboard");
+  await verifyHeadline(page);
+  await page.reload();
+  await verifyHeadline(page);
+  const horizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+  expect(horizontalOverflow).toBe(false);
+});
+
+test("fee retry/refund and account/holding polling refresh without netting debt", async ({ page, identity, db }, info) => {
+  await page.clock.install();
+  await login(page, identity);
+  await verifyHeadline(page);
+  async function feeAction(action: string) {
+    const result = await page.request.post(`/api/admin/fees/assessments/${identity.assessment}/${action}`, {
+      headers: { "x-admin-key": process.env.BALANCE_E2E_ADMIN! },
+      data: { confirmed: true, reason: "Isolated browser regression" },
+    });
+    expect(result.ok(), await result.text()).toBeTruthy();
+  }
+  // Enables processing ONLY in the temporary local cluster.
+  const settings = await page.request.post("/api/admin/fees/settings", {
+    headers: { "x-admin-key": process.env.BALANCE_E2E_ADMIN! }, data: { enabled: true, confirmed: true },
+  });
+  expect(settings.ok()).toBeTruthy();
+  await feeAction("retry");
+  await page.clock.runFor(31000);
+  await expect(page.getByTestId(`dash-account-${identity.debt}`)).toContainText("CAD -$1,614.39");
+  await expect(page.getByTestId(`debt-account-amount-${identity.debt}`)).toHaveText("CAD -$1,614.39");
+  await verifyHeadline(page);
+  await evidence(page, info, "fee-posted-to-negative-ledger");
+  await feeAction("refund");
+  await page.clock.runFor(31000);
+  await expect(page.getByTestId(`debt-account-amount-${identity.debt}`)).toHaveText("CAD -$1,250.75");
+  await expect(page.getByTestId(`dash-account-${identity.debt}`)).toContainText("CAD -$1,250.75");
+  await verifyHeadline(page);
+  await db.query("UPDATE accounts SET balance=balance+10 WHERE id=$1 AND user_id=$2", [identity.extra, identity.userId]);
+  await db.query("UPDATE investments SET current_price=251 WHERE account_id=$1", [identity.funded]);
+  await page.clock.runFor(31000);
+  await verifyHeadline(page, "$2,003,920.25");
+  await expect(page.getByTestId("text-liquid-cash")).toHaveText("CAD $2,001,410.25");
+  await expect(page.getByTestId("text-investment-value")).toHaveText("CAD $2,510.00");
+  await page.reload();
+  await verifyHeadline(page, "$2,003,920.25");
+});
+
+test("pending deposits, internal transfer, and institutional status/navigation changes", async ({ page, identity, db }, info) => {
+  test.setTimeout(180000);
+  await page.clock.install();
+  await login(page, identity);
+  await verifyHeadline(page);
+  await expect(page.getByTestId(`txn-row-${identity.deposit}`)).toContainText("pending");
+  await expect(page.getByText("CAD $9,000,000.00 pending", { exact: true })).toBeVisible();
+  const transfer = await page.request.post("/api/transactions/transfer", {
+    data: { fromAccountId: identity.funded, toAccountId: identity.extra, amount: "100.00" },
+  });
+  expect(transfer.status(), await transfer.text()).toBe(201);
+  await page.clock.runFor(31000);
+  await expect(page.getByTestId(`dash-account-${identity.extra}`)).toContainText("$600.00");
+  await verifyHeadline(page);
+  const request = await page.request.post("/api/institutional-transfers", { data: {
+    institutionName: "Isolated Test Institution", institutionCountry: "CA", institutionAccountNumber: "TEST-NOT-REAL",
+    accountType: "Brokerage Account", transferType: "cash", transferScope: "full",
+    accountId: identity.funded,
+  } });
+  expect(request.status(), await request.text()).toBe(200);
+  const record = await request.json();
+  for (const status of ["pending", "under_review", "approved", "liquidating", "transfer_out", "completed", "rejected"]) {
+    await db.query("UPDATE institutional_transfers SET status=$1 WHERE id=$2 AND user_id=$3",
+      [status, record.id, identity.userId]);
+    await page.clock.runFor(16000);
+    await verifyHeadline(page);
+    await expect(page.getByTestId(`debt-account-amount-${identity.debt}`)).toHaveText("CAD -$1,614.39");
+    if (status === "transfer_out") {
+      await expect(page.getByText("Funds in transit to Isolated Test Institution")).toBeVisible();
+      await evidence(page, info, "funds-in-transit-retain-funded-headline");
+    }
+    if (["approved", "liquidating", "transfer_out"].includes(status)) {
+      // Pending credits stay separate; a transfer status does not post the cash.
+      await expect(page.getByText("CAD $9,000,000.00 pending · Transfer on hold", { exact: true })).toBeVisible();
+    }
+    await page.goto("/transfers");
+    if (status === "rejected") {
+      // Current transfer list deliberately omits rejected requests.
+      await expect(page.getByTestId(`inst-transfer-${record.id}`)).toHaveCount(0);
+      await expect(page.getByText("No transfer requests yet")).toBeVisible();
+    } else {
+      await expect(page.getByTestId(`inst-transfer-${record.id}`)).toBeVisible();
+    }
+    await page.goto("/dashboard");
+    await verifyHeadline(page);
+  }
+  await db.query("UPDATE transactions SET status='failed' WHERE id=$1 AND to_account_id=$2", [identity.deposit, identity.funded]);
+  await page.clock.runFor(31000);
+  await expect(page.getByTestId(`txn-row-${identity.deposit}`)).toContainText("failed");
+  // Activity and the primary-account pending summary poll independently.
+  // Advance the paused clock while waiting so an in-flight earlier request
+  // can finish and the summary's next interval can fetch the changed status.
+  await expect.poll(async () => {
+    await page.clock.runFor(31000);
+    return page.getByText("CAD $9,000,000.00 pending", { exact: true }).count();
+  }, {timeout:20000,message:"The refreshed primary-account summary must exclude the failed deposit"}).toBe(0);
+  await verifyHeadline(page);
+  // Only ledger posting, not transaction status, changes funded assets.
+  await db.query("UPDATE accounts SET balance=balance+9000000 WHERE id=$1 AND user_id=$2", [identity.funded, identity.userId]);
+  await db.query("UPDATE transactions SET status='completed' WHERE id=$1 AND to_account_id=$2", [identity.deposit, identity.funded]);
+  // Let a pre-posting request finish, then advance to the next account poll.
+  // Moving the virtual clock alone does not wait for real network responses.
+  await expect.poll(async () => {
+    await page.clock.runFor(31000);
+    return page.getByTestId("text-total-balance").innerText();
+  }, {timeout:20000,message:"The refreshed accounts must include the posted deposit"}).toBe("CAD $11,003,900.25");
+  await verifyHeadline(page, "$11,003,900.25");
+  await expect(page.getByTestId(`txn-row-${identity.deposit}`)).toContainText("completed");
+});
+
+test("loading, request failures, malformed balances and recovery do not show fabricated totals", async ({ page, identity }, info) => {
+  await page.clock.install();
+  let release!: () => void;
+  const held = new Promise<void>(done => { release = done; });
+  await page.route("**/api/accounts/snapshot", async route => { await held; await route.continue(); });
+  await login(page, identity);
+  await expect(page.getByTestId("text-total-balance")).toHaveCount(0);
+  await evidence(page, info, "loading-without-fabricated-balance");
+  release();
+  await verifyHeadline(page);
+  await page.unroute("**/api/accounts/snapshot");
+  for (const endpoint of ["accounts/snapshot", "investments"]) {
+    await page.route(`**/api/${endpoint}`, route => route.fulfill({ status: 503, json: { message: "Injected isolated failure" } }));
+    // Failed polling must not continue displaying a stale funded headline.
+    await page.clock.runFor(31000);
+    await verifyHeadline(page, "Unavailable");
+    await evidence(page, info, `${endpoint.replace("/", "-")}-poll-failure-hides-stale-total`);
+    await page.reload();
+    await verifyHeadline(page, "Unavailable");
+    await expect(page.getByRole("alert").filter({ hasText: "Current balances could not be loaded" })).toBeVisible();
+    await page.unroute(`**/api/${endpoint}`);
+    await page.getByRole("button", { name: "Retry", exact: true }).first().click();
+    await verifyHeadline(page);
+  }
+  await page.route("**/api/accounts/snapshot", route => route.fulfill({ status: 503, json: { message: "Injected snapshot failure" } }));
+  await page.reload();
+  await verifyHeadline(page, "Unavailable");
+  await expect(page.getByRole("alert").filter({ hasText: "Account balance details are unavailable" })).toBeVisible();
+  await page.unroute("**/api/accounts/snapshot");
+  await page.getByRole("button", { name: "Retry", exact: true }).first().click();
+  await expect(page.getByTestId(`debt-account-amount-${identity.debt}`)).toHaveText("CAD -$1,614.39");
+  await page.route("**/api/accounts/snapshot", async route => {
+    const response = await route.fetch();
+    const snapshot = await response.json();
+    snapshot.accounts[0].balance = "invalid";
+    await route.fulfill({ json: snapshot });
+  });
+  await page.reload();
+  await verifyHeadline(page, "Unavailable");
+  await page.unroute("**/api/accounts/snapshot");
+  await page.getByRole("button", { name: "Retry", exact: true }).click();
+  await verifyHeadline(page);
+});
+
+test("existing accounts privacy control masks cash, fee debt and named ledger details", async ({ page, identity }, info) => {
+  await login(page, identity);
+  await verifyHeadline(page);
+  await page.getByTestId("button-quick-accounts").click();
+  await expect(page.getByTestId(`debt-account-amount-${identity.debt}`)).toHaveText("CAD $1,614.39");
+  await page.getByTestId("button-toggle-balances").click();
+  await expect(page.getByTestId("text-total-balance")).not.toContainText("$");
+  await expect(page.getByTestId(`debt-account-amount-${identity.debt}`)).toHaveText("••••••");
+  await expect(page.getByTestId(`balance-${identity.debt}`)).not.toContainText("$");
+  await expect(page.getByTestId(`balance-${identity.sixth}`)).not.toContainText("$");
+  await expect(page.getByRole("region", { name: "Account balances", exact: true })).not.toContainText("$");
+  await expect(page.getByTestId(`account-row-${identity.debt}`)).not.toContainText("1,250.75");
+  await evidence(page, info, "accounts-privacy-masks-balances-and-debt");
+  await page.getByTestId("button-toggle-balances").click();
+  await expect(page.getByTestId(`balance-${identity.debt}`)).toHaveText("CAD -$1,250.75");
+  await expect(page.getByTestId(`balance-${identity.sixth}`)).toHaveText("CAD $125.00");
+  await page.goto("/dashboard");
+  await verifyHeadline(page, HEADLINE);
+});
+
+test("clients cannot relabel CAD ledgers through profile updates", async ({ page, identity, db }) => {
+  await login(page, identity);
+  await verifyHeadline(page);
+  for (const displayCurrency of ["GBP", "CAD", null, "USD"]) {
+    const result = await page.request.patch("/api/user", { data: { displayCurrency } });
+    expect(result.status()).toBe(403);
+    expect(await result.json()).toMatchObject({ message: expect.stringContaining("cannot be changed") });
+  }
+  const { rows: [user] } = await db.query("SELECT display_currency FROM users WHERE id=$1 AND client_ref=$2",
+    [identity.userId, identity.ref]);
+  expect(user.display_currency).toBe("CAD");
+  await page.reload();
+  await verifyHeadline(page);
+  await expect(page.getByTestId(`debt-account-amount-${identity.debt}`)).toHaveText("CAD -$1,614.39");
+  await page.getByTestId(`dash-account-${identity.debt}`).click();
+  await expect(page.getByTestId("text-account-cash-balance")).toHaveText("CAD -$1,250.75");
+  await expect(page.getByTestId("account-detail-balance")).not.toContainText("ledger");
+});
+
+test("preconfigured pound exception preserves amounts and consistent detail/debt labels without changing CAD clients", async ({ page, identity, db, browser }, info) => {
+  const cadRef = `${identity.ref}-CAD`;
+  const { rows: [ordinary] } = await db.query(
+    `INSERT INTO users(client_ref,email,name,password)
+     SELECT $1,$2,'Ordinary CAD Test Client',password FROM users WHERE id=$3 AND client_ref=$4 RETURNING id`,
+    [cadRef, `${cadRef.toLowerCase()}@example.invalid`, identity.userId, identity.ref]);
+  await db.query("INSERT INTO accounts(user_id,account_type,display_name,balance) VALUES($1,'Brokerage Account','CAD Counterpart',100)", [ordinary.id]);
+  const priorCurrencies = await db.query("SELECT id,display_currency FROM users WHERE id<>$1 ORDER BY id", [identity.userId]);
+  // Simulate an already explicitly designated exception on our disposable
+  // identity, not Mary or an existing client. Still sign in normally afterward.
+  await db.query("UPDATE users SET display_currency='GBP' WHERE id=$1 AND client_ref=$2",
+    [identity.userId, identity.ref]);
+  await login(page, identity);
+  await verifyHeadline(page, "£2,003,900.25");
+  await expect(page.getByTestId("text-liquid-cash")).toHaveText("£2,001,400.25");
+  await expect(page.getByTestId("text-investment-value")).toHaveText("£2,500.00");
+  await expect(page.getByTestId(`debt-account-amount-${identity.debt}`)).toHaveText("-£1,614.39");
+  await expect(page.getByTestId(`dash-account-${identity.debt}`)).toContainText("-£1,250.75");
+  await evidence(page, info, "preconfigured-pound-exception-funded-balance-and-debt");
+  await page.getByTestId("button-quick-accounts").click();
+  await expect(page.getByTestId(`balance-${identity.sixth}`)).toHaveText("£125.00");
+  await expect(page.getByTestId(`balance-${identity.debt}`)).toHaveText("-£1,250.75");
+  await expect(page.getByTestId(`debt-account-details-${identity.debt}`)).toHaveCount(0);
+  await page.getByTestId(`account-row-${identity.debt}`).click();
+  const debt = page.getByTestId("account-detail-balance");
+  await expect(debt).toContainText("-£1,250.75");
+  await expect(debt).toContainText("£363.64");
+  await expect(debt).not.toContainText("CAD");
+  await expect(debt).not.toContainText("GBP");
+  await expect(page.getByTestId("text-account-cash-balance")).toHaveText("-£1,250.75");
+  await evidence(page, info, "pound-account-detail-consistent-debt-and-ledger");
+  await page.goto(`/accounts/${identity.funded}`);
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Export", exact: true }).click();
+  const csv = await readFile(await (await download).path(), "utf8");
+  expect(csv).toContain("Amount (£)");
+  expect(csv).toContain('"9000000"');
+  expect(csv).not.toContain("Amount (CAD)");
+  await page.reload();
+  await expect(page.getByTestId("text-account-cash-balance")).toHaveText("£2,000,000.25");
+  await page.goto("/dashboard");
+  await verifyHeadline(page, "£2,003,900.25");
+  const otherClients = await db.query("SELECT id,display_currency FROM users WHERE id<>$1 ORDER BY id", [identity.userId]);
+  // Prior ordinary fixtures remain CAD; do not touch them to configure this exception.
+  expect(otherClients.rows).toEqual(priorCurrencies.rows);
+  const { rows: [account] } = await db.query("SELECT balance FROM accounts WHERE id=$1 AND user_id=$2",
+    [identity.funded, identity.userId]);
+  expect(account.balance).toBe("2000000.25");
+  const context = await browser.newContext({ baseURL: process.env.BALANCE_E2E_URL, viewport: page.viewportSize()! });
+  try {
+    const cadPage = await context.newPage();
+    await login(cadPage, { ...identity, userId: ordinary.id, ref: cadRef });
+    await verifyHeadline(cadPage, "CAD $100.00");
+    await expect(cadPage.getByTestId("text-total-balance")).not.toContainText("£");
+  } finally {
+    await context.close();
+  }
+});
