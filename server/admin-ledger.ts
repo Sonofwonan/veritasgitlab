@@ -73,8 +73,16 @@ function subtractDecimalStrings(a: string, b: string): string {
 const positiveAmountSchema = z
   .string()
   .trim()
-  .regex(/^\d+(\.\d{1,2})?$/, "Enter a valid positive amount with up to 2 decimal places")
-  .refine((val) => moneyToCents(val) > 0n, "Amount must be greater than 0");
+  .transform((val) => val.replace(/\s+/g, ""))
+  .refine(
+    (val) => /^(\d+|\d{1,3}(,\d{3})+)(\.\d{1,2})?$/.test(val),
+    "Enter a valid positive amount with up to 2 decimal places (e.g. 25000.00 or 25,000.00)",
+  )
+  .transform((val) => val.replace(/,/g, ""))
+  .refine(
+    (val) => /^\d+(\.\d{1,2})?$/.test(val) && moneyToCents(val) > 0n,
+    "Amount must be greater than 0",
+  );
 
 const effectiveDateSchema = z
   .string()

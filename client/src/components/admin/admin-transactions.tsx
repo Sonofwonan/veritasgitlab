@@ -777,8 +777,8 @@ export function AdminTransactions({ adminKey, currentStaff, allUsers }: AdminTra
             {!postingPreview ? (
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="md:col-span-2 space-y-1.5">
-                  <label className="text-xs uppercase tracking-wider text-slate-400 font-semibold">Posting Type</label>
-                  <div className="grid sm:grid-cols-2 gap-3">
+                  <p id="posting-type-label" className="text-xs uppercase tracking-wider text-slate-400 font-semibold">Posting Type</p>
+                  <div className="grid sm:grid-cols-2 gap-3" role="group" aria-labelledby="posting-type-label">
                     <button
                       type="button"
                       onClick={() => setPostingForm(f => ({ ...f, postingType: "deposit", fromAccountId: "" }))}
