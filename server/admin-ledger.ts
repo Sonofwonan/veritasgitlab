@@ -485,7 +485,8 @@ export function registerAdminLedgerRoutes(
       const { rows } = await pool.query(
         `SELECT a.id, a.user_id AS "userId", a.account_number AS "accountNumber",
            a.account_type AS "accountType", a.display_name AS "displayName",
-           a.balance::text AS "balance", u.name AS "userName", u.email AS "userEmail"
+           a.balance::text AS "balance", u.name AS "userName", u.email AS "userEmail",
+           u.client_ref AS "userClientRef"
          FROM accounts a
          JOIN users u ON u.id = a.user_id
          ORDER BY u.name ASC, a.id ASC`,
@@ -532,11 +533,13 @@ export function registerAdminLedgerRoutes(
            fa.user_id AS "fromUserId",
            fu.name AS "fromUserName",
            fu.email AS "fromUserEmail",
+           fu.client_ref AS "fromClientRef",
            ta.account_number AS "toAccountNumber",
            COALESCE(NULLIF(ta.display_name, ''), ta.account_type) AS "toAccountLabel",
            ta.user_id AS "toUserId",
            tu.name AS "toUserName",
            tu.email AS "toUserEmail",
+           tu.client_ref AS "toClientRef",
            p.name AS "payeeName",
            rev.id AS "reversedByTransactionId",
            (SELECT apr.id FROM admin_posting_requests apr
@@ -556,12 +559,14 @@ export function registerAdminLedgerRoutes(
         const clientUserId = r.fromUserId ?? r.toUserId ?? null;
         const userName = r.fromUserName ?? r.toUserName ?? "Unknown";
         const userEmail = r.fromUserEmail ?? r.toUserEmail ?? "";
+        const userClientRef = r.fromClientRef ?? r.toClientRef ?? null;
         const direction = deriveDirection(r);
         return {
           ...r,
           clientUserId,
           userName,
           userEmail,
+          userClientRef,
           direction,
         };
       });
@@ -752,6 +757,7 @@ export function registerAdminLedgerRoutes(
            r.created_at AS "createdAt",
            u.name AS "clientName",
            u.email AS "clientEmail",
+           u.client_ref AS "clientRef",
            fa.account_number AS "fromAccountNumber",
            COALESCE(NULLIF(fa.display_name, ''), fa.account_type) AS "fromAccountLabel",
            fa.balance::text AS "fromAccountBalance",

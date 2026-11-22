@@ -14,6 +14,7 @@ type ClientUser = {
   id: number;
   name: string;
   email?: string;
+  clientRef?: string | null;
   displayCurrency?: string | null;
   totalBalance?: string | number;
 };
@@ -204,7 +205,7 @@ export function ClientCurrencyPanel({
         <DialogHeader>
           <DialogTitle>Client display currency</DialogTitle>
           <DialogDescription className="min-w-0 [overflow-wrap:anywhere] text-slate-400">
-            {user?.name} {user?.email ? `· ${user.email}` : ""}
+            {user?.name} {user?.clientRef ? `· ${user.clientRef}` : ""} {user?.email ? `· ${user.email}` : ""}
           </DialogDescription>
         </DialogHeader>
 

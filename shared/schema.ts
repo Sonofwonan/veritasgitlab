@@ -270,6 +270,7 @@ export const accountSetupTokens = pgTable("account_setup_tokens", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull(),
   tokenHash: text("token_hash").notNull().unique(),
+  purpose: text("purpose").notNull().default("activation"),
   expiresAt: timestamp("expires_at").notNull(),
   consumedAt: timestamp("consumed_at"),
   createdAt: timestamp("created_at").defaultNow(),

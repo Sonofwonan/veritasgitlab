@@ -592,6 +592,9 @@ export function AdminTransactions({ adminKey, currentStaff, allUsers }: AdminTra
                         <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400">
                           <span>
                             Client: <span className="text-slate-200 font-medium">{txn.userName}</span>{" "}
+                            {txn.userClientRef && (
+                              <span className="font-mono text-emerald-300 text-[11px] mx-1">[{txn.userClientRef}]</span>
+                            )}
                             {txn.userEmail ? `(${txn.userEmail})` : ""}
                           </span>
                           <span>
@@ -719,7 +722,11 @@ export function AdminTransactions({ adminKey, currentStaff, allUsers }: AdminTra
                             <p className="text-slate-200 text-sm font-medium">{req.description}</p>
                             <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-xs text-slate-400 pt-1">
                               <span>
-                                Client: <span className="text-slate-200">{req.clientName}</span> ({req.clientEmail})
+                                Client: <span className="text-slate-200">{req.clientName}</span>{" "}
+                                {req.clientRef && (
+                                  <span className="font-mono text-emerald-300 text-[11px] mx-1">[{req.clientRef}]</span>
+                                )}
+                                ({req.clientEmail})
                               </span>
                               <span>
                                 Created By:{" "}
@@ -895,7 +902,7 @@ export function AdminTransactions({ adminKey, currentStaff, allUsers }: AdminTra
                     <option value="">Select client…</option>
                     {(Array.isArray(allUsers) ? allUsers : []).map((u: any) => (
                       <option key={u.id} value={u.id}>
-                        {u.name} ({u.email})
+                        {u.clientRef ? `[${u.clientRef}] ` : ""}{u.name} ({u.email})
                       </option>
                     ))}
                   </select>
@@ -1248,6 +1255,9 @@ export function AdminTransactions({ adminKey, currentStaff, allUsers }: AdminTra
                             </td>
                             <td className="py-3 pr-3">
                               <div className="text-slate-200 font-medium">{txn.userName}</div>
+                              {txn.userClientRef && (
+                                <div className="font-mono text-[11px] text-emerald-300">{txn.userClientRef}</div>
+                              )}
                               <div className="text-slate-400 text-xs">{txn.fromAccountLabel || txn.toAccountLabel || "—"}</div>
                               {txn.fromAccountLabel && txn.toAccountLabel && (
                                 <div className="text-slate-500 text-xs">→ {txn.toAccountLabel}</div>

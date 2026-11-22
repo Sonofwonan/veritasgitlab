@@ -12,29 +12,34 @@ const passwordChecks = [
 
 export default function AccountActivationPage() {
   const [token, setToken] = useState("");
+  const [mode, setMode] = useState<"activation" | "reset">("activation");
   const [tokenReady, setTokenReady] = useState(false);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [clientRef, setClientRef] = useState("");
+  const [completedPurpose, setCompletedPurpose] = useState<"activation" | "reset">("activation");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.hash.replace(/^#/, ""));
     const fragmentToken = params.get("token") || "";
+    const fragmentMode = params.get("mode") === "reset" ? "reset" : "activation";
     window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
     setToken(fragmentToken);
+    setMode(fragmentMode);
     setTokenReady(true);
   }, []);
 
   const passwordIsValid = passwordChecks.every(check => check.test(password));
   const passwordsMatch = password === confirmPassword;
+  const isReset = mode === "reset";
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
     if (!token) {
-      setError("This setup link is missing or invalid. Contact the team for a new link.");
+      setError("This link is missing or invalid. Contact the team for a new link.");
       return;
     }
     if (!passwordIsValid) {
@@ -54,13 +59,14 @@ export default function AccountActivationPage() {
         body: JSON.stringify({ token, password }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data?.message || "Unable to complete account setup.");
+      if (!response.ok) throw new Error(data?.message || "Unable to complete password setup.");
       setClientRef(data.clientRef);
+      setCompletedPurpose(data.purpose === "admin_reset" ? "reset" : mode);
       setToken("");
       setPassword("");
       setConfirmPassword("");
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Unable to complete account setup.");
+      setError(requestError instanceof Error ? requestError.message : "Unable to complete password setup.");
     } finally {
       setSubmitting(false);
     }
@@ -79,8 +85,12 @@ export default function AccountActivationPage() {
             <div className="space-y-6">
               <CheckCircle2 className="h-8 w-8 text-primary" />
               <div>
-                <p className="label-caps text-muted-foreground">Account setup complete</p>
-                <h1 className="mt-2 font-serif text-3xl">Your account is ready.</h1>
+                <p className="label-caps text-muted-foreground">
+                  {completedPurpose === "reset" ? "Password updated" : "Account setup complete"}
+                </p>
+                <h1 className="mt-2 font-serif text-3xl">
+                  {completedPurpose === "reset" ? "Your new password is active." : "Your account is ready."}
+                </h1>
               </div>
               <p className="text-sm leading-relaxed text-muted-foreground">
                 Your Client ID is <strong className="font-mono text-accent">{clientRef}</strong>. Keep it available; you will use it with your password to sign in.
@@ -91,10 +101,16 @@ export default function AccountActivationPage() {
             </div>
           ) : (
             <>
-              <p className="label-caps text-muted-foreground">Secure account setup</p>
-              <h1 className="mt-2 font-serif text-3xl">Create your password.</h1>
+              <p className="label-caps text-muted-foreground">
+                {isReset ? "Administrator-issued password reset" : "Secure account setup"}
+              </p>
+              <h1 className="mt-2 font-serif text-3xl">
+                {isReset ? "Reset your password." : "Create your password."}
+              </h1>
               <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                This one-time link is valid for 24 hours. Choose a strong password to activate your account.
+                {isReset
+                  ? "This one-time reset link is valid for 24 hours. Enter a new strong password for your Veritas Wealth profile. Any existing two-factor authentication stays active."
+                  : "This one-time link is valid for 24 hours. Choose a strong password to activate your account."}
               </p>
 
               {!tokenReady ? (
@@ -104,7 +120,7 @@ export default function AccountActivationPage() {
               ) : !token ? (
                 <div className="mt-8 space-y-4 border border-destructive/30 bg-destructive/5 p-4">
                   <p className="text-sm leading-relaxed text-destructive">
-                    This setup link is missing or invalid. Ask the team to verify your identity and provide a new link.
+                    This link is missing or invalid. Ask the team to verify your identity and provide a new link.
                   </p>
                   <Link href="/auth" className="label-caps text-primary hover:underline">Return to sign in</Link>
                 </div>
@@ -155,7 +171,7 @@ export default function AccountActivationPage() {
                     className="flex w-full items-center justify-center gap-2 bg-primary px-6 py-3 text-sm text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-                    Activate account
+                    {isReset ? "Save new password" : "Activate account"}
                   </button>
                 </form>
               )}

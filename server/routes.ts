@@ -5,9 +5,9 @@ import { storage } from "./storage";
 import { setupAuth } from "./auth";
 import { api, errorSchemas, insertPayeeSchema } from "@shared/routes";
 import { z } from "zod";
-import { type User, accounts, transactions, payees, applications, users, institutionalTransfers, accountSetupTokens } from "@shared/schema";
+import { type User, accounts, transactions, payees, applications, users, institutionalTransfers, accountSetupTokens, investments } from "@shared/schema";
 import { db, pool } from "./db";
-import { eq, or, desc, sql } from "drizzle-orm";
+import { eq, or, desc, sql, inArray } from "drizzle-orm";
 import twilio from "twilio";
 import passport from "passport";
 import { registerFeeRoutes } from "./fees/routes";
@@ -115,10 +115,13 @@ export async function registerRoutes(
         id SERIAL PRIMARY KEY,
         user_id INTEGER NOT NULL,
         token_hash TEXT NOT NULL UNIQUE,
+        purpose TEXT NOT NULL DEFAULT 'activation',
         expires_at TIMESTAMP NOT NULL,
         consumed_at TIMESTAMP,
         created_at TIMESTAMP DEFAULT NOW()
       );
+      ALTER TABLE account_setup_tokens
+        ADD COLUMN IF NOT EXISTS purpose TEXT NOT NULL DEFAULT 'activation';
       CREATE INDEX IF NOT EXISTS account_setup_tokens_user_id_idx ON account_setup_tokens(user_id);
     `);
   } catch (_) { /* columns likely already exist */ }
@@ -506,8 +509,8 @@ export async function registerRoutes(
     try {
       const all = await db.select().from(payees).orderBy(desc(payees.createdAt));
       const enriched = await Promise.all(all.map(async (p) => {
-        const [user] = await db.select({ name: users.name, email: users.email }).from(users).where(eq(users.id, p.userId));
-        return { ...p, userName: user?.name || "Unknown", userEmail: user?.email || "" };
+        const [user] = await db.select({ name: users.name, email: users.email, clientRef: users.clientRef }).from(users).where(eq(users.id, p.userId));
+        return { ...p, userName: user?.name || "Unknown", userEmail: user?.email || "", userClientRef: user?.clientRef || null };
       }));
       res.json(enriched);
     } catch (err: any) { res.status(500).json({ message: err.message }); }
@@ -542,12 +545,12 @@ export async function registerRoutes(
         .where(eq(transactions.transactionType, 'payment'))
         .orderBy(desc(transactions.createdAt));
       const enriched = await Promise.all(all.map(async (t) => {
-        let userName = "Unknown", userEmail = "";
+        let userName = "Unknown", userEmail = "", userClientRef: string | null = null;
         if (t.fromAccountId) {
           const [acc] = await db.select().from(accounts).where(eq(accounts.id, t.fromAccountId));
           if (acc) {
-            const [u] = await db.select({ name: users.name, email: users.email }).from(users).where(eq(users.id, acc.userId));
-            if (u) { userName = u.name; userEmail = u.email; }
+            const [u] = await db.select({ name: users.name, email: users.email, clientRef: users.clientRef }).from(users).where(eq(users.id, acc.userId));
+            if (u) { userName = u.name; userEmail = u.email; userClientRef = u.clientRef ?? null; }
           }
         }
         let payeeName = "Unknown";
@@ -555,7 +558,7 @@ export async function registerRoutes(
           const [p] = await db.select({ name: payees.name, bankName: payees.bankName }).from(payees).where(eq(payees.id, t.payeeId));
           if (p) payeeName = `${p.name} (${p.bankName || "—"})`;
         }
-        return { ...t, userName, userEmail, payeeName };
+        return { ...t, userName, userEmail, userClientRef, payeeName };
       }));
       res.json(enriched);
     } catch (err: any) { res.status(500).json({ message: err.message }); }
@@ -716,7 +719,7 @@ export async function registerRoutes(
       await client.query("BEGIN");
 
       const tokenResult = await client.query(
-        `SELECT id, user_id
+        `SELECT id, user_id, COALESCE(purpose, 'activation') AS purpose
            FROM account_setup_tokens
           WHERE token_hash = $1
             AND consumed_at IS NULL
@@ -730,9 +733,10 @@ export async function registerRoutes(
       }
 
       const userId = tokenResult.rows[0].user_id;
+      const purpose: string = tokenResult.rows[0].purpose || "activation";
       await client.query("INSERT INTO client_security(user_id) VALUES($1) ON CONFLICT DO NOTHING", [userId]);
       const securityResult = await client.query("SELECT mfa_enabled FROM client_security WHERE user_id=$1 FOR UPDATE", [userId]);
-      if (securityResult.rows[0].mfa_enabled) {
+      if (purpose !== "admin_reset" && securityResult.rows[0].mfa_enabled) {
         await client.query("ROLLBACK");
         return res.status(403).json({ message: "Please sign in and use Security settings to change your password." });
       }
@@ -751,9 +755,12 @@ export async function registerRoutes(
       );
       await client.query("INSERT INTO client_security(user_id) VALUES($1) ON CONFLICT DO NOTHING", [userId]);
       await client.query("UPDATE client_security SET version=version+1,pending_secret=NULL,pending_expires=NULL,pending_session=NULL WHERE user_id=$1", [userId]);
+      if (purpose === "admin_reset") {
+        await client.query("INSERT INTO client_security_events(user_id, event) VALUES($1, $2)", [userId, "password_reset_by_admin_link"]);
+      }
       await revokeSessions(client, userId);
       await client.query("COMMIT");
-      return res.json({ ok: true, clientRef: updateResult.rows[0].client_ref });
+      return res.json({ ok: true, clientRef: updateResult.rows[0].client_ref, purpose });
     } catch (err: any) {
       if (client) await client.query("ROLLBACK").catch(() => {});
       if (err instanceof z.ZodError) {
@@ -768,11 +775,20 @@ export async function registerRoutes(
 
   // ─── Admin Routes ────────────────────────────────────────────────────────────
 
-  // All applications
+  // All applications (enriched with matched clientRef when approved/registered)
   app.get("/api/admin/applications", requireAdmin, async (req, res) => {
     try {
       const all = await db.select().from(applications).orderBy(desc(applications.createdAt));
-      res.json(all.map(({ password: _password, ...application }) => application));
+      const allUsersRef = await db.select({ email: users.email, clientRef: users.clientRef, id: users.id }).from(users);
+      const refByEmail = new Map(allUsersRef.map(u => [u.email.toLowerCase(), { clientRef: u.clientRef, userId: u.id }]));
+      res.json(all.map(({ password: _password, ...application }) => {
+        const match = refByEmail.get((application.email || "").toLowerCase());
+        return {
+          ...application,
+          clientRef: match?.clientRef ?? null,
+          userId: match?.userId ?? null,
+        };
+      }));
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -898,18 +914,277 @@ export async function registerRoutes(
     }
   });
 
-  // All users with account summary
+  // All users with account summary and security posture
   app.get("/api/admin/users", requireAdmin, async (req, res) => {
     try {
       const allUsers = await db.select().from(users).orderBy(desc(users.createdAt));
+      let mfaByUser = new Map<number, boolean>();
+      try {
+        const { rows: secRows } = await pool.query(`SELECT user_id, mfa_enabled FROM client_security`);
+        mfaByUser = new Map(secRows.map((r: any) => [Number(r.user_id), Boolean(r.mfa_enabled)]));
+      } catch { /* ignore when table unavailable */ }
       const result = await Promise.all(allUsers.map(async (u) => {
         const accs = await db.select().from(accounts).where(eq(accounts.userId, u.id));
         const totalBalance = accs.reduce((sum, a) => sum + Number(a.balance), 0);
-        return { ...u, password: undefined, accountCount: accs.length, totalBalance };
+        return {
+          ...u,
+          password: undefined,
+          accountCount: accs.length,
+          totalBalance,
+          mfaEnabled: mfaByUser.get(u.id) ?? false,
+        };
       }));
       res.json(result);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Dedicated full client profile details for Admin Client Profile page
+  app.get("/api/admin/users/:id/details", requireAdmin, async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    const parsedId = z.coerce.number().int().positive().safeParse(req.params.id);
+    if (!parsedId.success) {
+      return res.status(400).json({ message: "Invalid client user ID" });
+    }
+    const userId = parsedId.data;
+    try {
+      const [userRow] = await db.select().from(users).where(eq(users.id, userId));
+      if (!userRow) return res.status(404).json({ message: "Client profile not found" });
+      const { password: _password, ...safeClient } = userRow as any;
+
+      const userAccounts = await db.select().from(accounts).where(eq(accounts.userId, userId)).orderBy(accounts.id);
+      const accountIds = userAccounts.map(a => a.id);
+
+      const userPayees = await db.select().from(payees).where(eq(payees.userId, userId)).orderBy(desc(payees.createdAt));
+      const payeeIds = userPayees.map(p => p.id);
+
+      const userTransfers = await db
+        .select()
+        .from(institutionalTransfers)
+        .where(eq(institutionalTransfers.userId, userId))
+        .orderBy(desc(institutionalTransfers.createdAt));
+
+      const userInvestments = accountIds.length > 0
+        ? await db.select().from(investments).where(inArray(investments.accountId, accountIds))
+        : [];
+
+      const safeQuery = async <T = any>(sqlText: string, params: unknown[]): Promise<T[]> => {
+        try {
+          const { rows } = await pool.query(sqlText, params);
+          return rows as T[];
+        } catch {
+          return [];
+        }
+      };
+
+      const [
+        contactRows,
+        securityRows,
+        securityEvents,
+        recoveryRequests,
+        setupTokens,
+        applicationRows,
+        currencyAuditRows,
+        clientTransactions,
+        feeEnrollmentsRows,
+        managementContractRows,
+        feeAssessmentsRows,
+      ] = await Promise.all([
+        safeQuery(
+          `SELECT residential_address AS "residentialAddress", mailing_address AS "mailingAddress", updated_at AS "updatedAt"
+           FROM client_contact_details WHERE user_id = $1`,
+          [userId],
+        ),
+        safeQuery(
+          `SELECT mfa_enabled AS "mfaEnabled", version FROM client_security WHERE user_id = $1`,
+          [userId],
+        ),
+        safeQuery(
+          `SELECT id, event, created_at AS "createdAt"
+           FROM client_security_events WHERE user_id = $1 ORDER BY id DESC LIMIT 25`,
+          [userId],
+        ),
+        safeQuery(
+          `SELECT id, status, created_at AS "createdAt", reviewed_at AS "reviewedAt"
+           FROM client_recovery_requests WHERE user_id = $1 ORDER BY id DESC LIMIT 20`,
+          [userId],
+        ),
+        safeQuery(
+          `SELECT id, COALESCE(purpose, 'activation') AS purpose, expires_at AS "expiresAt",
+                  consumed_at AS "consumedAt", created_at AS "createdAt"
+           FROM account_setup_tokens WHERE user_id = $1 ORDER BY id DESC LIMIT 20`,
+          [userId],
+        ),
+        safeQuery(
+          `SELECT id, full_name AS "fullName", email, phone, date_of_birth AS "dateOfBirth",
+                  nationality, address, city, country, employment_status AS "employmentStatus",
+                  annual_income AS "annualIncome", investment_experience AS "investmentExperience",
+                  risk_tolerance AS "riskTolerance", investment_goal AS "investmentGoal",
+                  initial_deposit AS "initialDeposit", source_of_funds AS "sourceOfFunds",
+                  status, notes, created_at AS "createdAt"
+           FROM applications
+           WHERE LOWER(email) = LOWER($1)
+           ORDER BY id DESC LIMIT 1`,
+          [userRow.email],
+        ),
+        safeQuery(
+          `SELECT id, actor, previous_currency AS "previousCurrency", display_currency AS "displayCurrency",
+                  reason, created_at AS "createdAt"
+           FROM client_display_currency_audit WHERE user_id = $1 ORDER BY id DESC LIMIT 25`,
+          [userId],
+        ),
+        (accountIds.length > 0 || payeeIds.length > 0)
+          ? safeQuery(
+              `SELECT t.id, t.from_account_id AS "fromAccountId", t.to_account_id AS "toAccountId",
+                      t.payee_id AS "payeeId", t.amount::text AS amount, t.description,
+                      t.transaction_type AS "transactionType", t.status,
+                      t.entry_origin AS "entryOrigin", t.evidence_ref AS "evidenceRef",
+                      t.audit_reason AS "auditReason", t.admin_notes AS "adminNotes",
+                      t.created_by_staff_name AS "createdByStaffName",
+                      t.approved_by_staff_name AS "approvedByStaffName",
+                      t.created_at AS "createdAt",
+                      COALESCE(NULLIF(fa.display_name, ''), fa.account_type) AS "fromAccountLabel",
+                      fa.account_number AS "fromAccountNumber",
+                      COALESCE(NULLIF(ta.display_name, ''), ta.account_type) AS "toAccountLabel",
+                      ta.account_number AS "toAccountNumber",
+                      p.name AS "payeeName"
+               FROM transactions t
+               LEFT JOIN accounts fa ON fa.id = t.from_account_id
+               LEFT JOIN accounts ta ON ta.id = t.to_account_id
+               LEFT JOIN payees p ON p.id = t.payee_id
+               WHERE t.from_account_id = ANY($1::int[])
+                  OR t.to_account_id = ANY($1::int[])
+                  OR t.payee_id = ANY($2::int[])
+               ORDER BY t.created_at DESC, t.id DESC
+               LIMIT 150`,
+              [accountIds, payeeIds],
+            )
+          : Promise.resolve([]),
+        safeQuery(
+          `SELECT e.id, e.account_id AS "accountId", e.schedule_id AS "scheduleId", e.state,
+                  e.first_charge_date AS "firstChargeDate", e.next_period AS "nextPeriod",
+                  e.accepted_at AS "acceptedAt", e.created_at AS "createdAt",
+                  s.name AS "scheduleName", s.version AS "scheduleVersion",
+                  s.total::text AS "scheduleTotal", s.currency AS "scheduleCurrency"
+           FROM fee_enrollments e
+           LEFT JOIN fee_schedules s ON s.id = e.schedule_id
+           WHERE e.user_id = $1
+           ORDER BY e.id DESC`,
+          [userId],
+        ),
+        safeQuery(
+          `SELECT id, account_id AS "accountId", opening_date AS "openingDate",
+                  annual_minimum::text AS "annualMinimum", annual_rate_percent::text AS "annualRatePercent",
+                  state, next_period AS "nextPeriod", accepted_at AS "acceptedAt", created_at AS "createdAt"
+           FROM management_contracts WHERE user_id = $1 ORDER BY id DESC`,
+          [userId],
+        ),
+        accountIds.length > 0
+          ? safeQuery(
+              `SELECT id, account_id AS "accountId", kind, period, due_date AS "dueDate",
+                      total::text AS total, status, reason, created_at AS "createdAt"
+               FROM fee_assessments
+               WHERE account_id = ANY($1::int[])
+               ORDER BY id DESC LIMIT 50`,
+              [accountIds],
+            )
+          : Promise.resolve([]),
+      ]);
+
+      const totalBalance = userAccounts.reduce((sum, acc) => sum + Number(acc.balance || 0), 0);
+
+      res.json({
+        user: {
+          ...safeClient,
+          accountCount: userAccounts.length,
+          totalBalance,
+        },
+        contactDetails: contactRows[0] ?? null,
+        security: {
+          mfaEnabled: Boolean(securityRows[0]?.mfaEnabled),
+          version: Number(securityRows[0]?.version ?? 0),
+          events: securityEvents,
+          recoveryRequests,
+          setupTokens,
+        },
+        application: applicationRows[0] ?? null,
+        accounts: userAccounts,
+        investments: userInvestments,
+        transactions: clientTransactions,
+        payees: userPayees,
+        institutionalTransfers: userTransfers,
+        displayCurrencyAudit: currencyAuditRows,
+        fees: {
+          enrollments: feeEnrollmentsRows,
+          contracts: managementContractRows,
+          assessments: feeAssessmentsRows,
+        },
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to load client details" });
+    }
+  });
+
+  // Admin: generate a one-time password reset link for any client at any time
+  app.post("/api/admin/users/:id/password-reset-link", requireAdmin, async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    const parsedId = z.coerce.number().int().positive().safeParse(req.params.id);
+    if (!parsedId.success) {
+      return res.status(400).json({ message: "Invalid client user ID" });
+    }
+    const userId = parsedId.data;
+    const resetToken = randomBytes(32).toString("base64url");
+    const tokenHash = createHash("sha256").update(resetToken).digest("hex");
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+    let client;
+    try {
+      client = await pool.connect();
+      await client.query("BEGIN");
+      const { rows: [userRow] } = await client.query(
+        `SELECT id, name, email, client_ref AS "clientRef" FROM users WHERE id = $1 FOR UPDATE`,
+        [userId],
+      );
+      if (!userRow) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ message: "Client profile not found" });
+      }
+
+      // Invalidate any previously issued unused admin reset tokens for this user
+      await client.query(
+        `UPDATE account_setup_tokens
+         SET consumed_at = NOW()
+         WHERE user_id = $1 AND purpose = 'admin_reset' AND consumed_at IS NULL`,
+        [userId],
+      );
+
+      await client.query(
+        `INSERT INTO account_setup_tokens (user_id, token_hash, purpose, expires_at)
+         VALUES ($1, $2, 'admin_reset', $3)`,
+        [userId, tokenHash, expiresAt],
+      );
+
+      await client.query(
+        `INSERT INTO client_security_events (user_id, event) VALUES ($1, $2)`,
+        [userId, "password_reset_link_issued"],
+      );
+
+      await client.query("COMMIT");
+      return res.json({
+        ok: true,
+        userId: userRow.id,
+        userName: userRow.name,
+        email: userRow.email,
+        clientRef: userRow.clientRef,
+        resetPath: `/activate#token=${resetToken}&mode=reset`,
+        expiresAt: expiresAt.toISOString(),
+      });
+    } catch (err: any) {
+      if (client) await client.query("ROLLBACK").catch(() => {});
+      return res.status(500).json({ message: err?.message || "Failed to generate password reset link" });
+    } finally {
+      client?.release();
     }
   });
 
@@ -1120,6 +1395,7 @@ export async function registerRoutes(
           ...r,
           userName: user?.name || "Unknown",
           userEmail: user?.email || "",
+          userClientRef: user?.clientRef || null,
           accountType2: account?.accountType || (r.transferScope === "full-portfolio" ? "Full Portfolio" : ""),
           accountBalance: account?.balance || "0",
         };
