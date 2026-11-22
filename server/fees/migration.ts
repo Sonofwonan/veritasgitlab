@@ -86,7 +86,12 @@ export async function initializeFeeTables(pool: Pool) {
       EXCEPTION WHEN duplicate_object THEN NULL; END $$;
       ALTER TABLE fee_audit ADD COLUMN IF NOT EXISTS contract_id INTEGER REFERENCES management_contracts(id);
       CREATE OR REPLACE FUNCTION protect_fee_immutable() RETURNS trigger AS $$
-      BEGIN RAISE EXCEPTION 'Fee schedules and audit entries are immutable'; END;
+      BEGIN
+        IF TG_OP='DELETE' AND current_setting('veritas.admin_delete', true) = 'on' THEN
+          RETURN OLD;
+        END IF;
+        RAISE EXCEPTION 'Fee schedules and audit entries are immutable';
+      END;
       $$ LANGUAGE plpgsql;
       DROP TRIGGER IF EXISTS fee_audit_immutable ON fee_audit;
       CREATE TRIGGER fee_audit_immutable BEFORE UPDATE OR DELETE ON fee_audit
@@ -99,6 +104,9 @@ export async function initializeFeeTables(pool: Pool) {
         FOR EACH ROW EXECUTE FUNCTION protect_fee_immutable();
       CREATE OR REPLACE FUNCTION protect_management_terms() RETURNS trigger AS $$
       BEGIN
+        IF TG_OP='DELETE' AND current_setting('veritas.admin_delete', true) = 'on' THEN
+          RETURN OLD;
+        END IF;
         IF TG_OP='DELETE' THEN RAISE EXCEPTION 'Management contract history is immutable'; END IF;
         IF (NEW.account_id,NEW.user_id,NEW.opening_date,NEW.annual_minimum,NEW.annual_rate_percent,
             NEW.terms,NEW.funding,NEW.pricing_interaction,NEW.created_at) IS DISTINCT FROM

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { AlertTriangle, ChevronDown, ChevronUp, CircleDollarSign, Clock3, FilePlus2, Loader2, RefreshCw, ShieldCheck } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronUp, CircleDollarSign, Clock3, FilePlus2, Loader2, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
 import { useAdminFees, useAdminFeeAction, useFeePreview } from "@/hooks/use-fees";
 import { BILLING_TIME_ZONE, DEFAULT_FEE_COMPONENTS, DEFAULT_FEE_TERMS, OVERDRAFT_FEE_TERMS, MANAGEMENT_TERMS, annualDate, validateBillingDate, billingToday, formatCAD, type FeeAssessment, type FeeEnrollment, type ManagementContract } from "@shared/fees";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,7 @@ function dateLabel(value: string | null | undefined) {
   return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleDateString("en-CA", { year: "numeric", month: "long", day: "numeric" });
 }
 
-type ConfirmAction = { path: string; body: unknown; title: string; consequence: string } | null;
+type ConfirmAction = { path: string; body?: unknown; method?: "POST" | "DELETE"; title: string; consequence: string } | null;
 
 export function AdminFees({ adminKey }: { adminKey: string }) {
   const fees = useAdminFees(adminKey);
@@ -57,10 +57,10 @@ export function AdminFees({ adminKey }: { adminKey: string }) {
     return date.toISOString().slice(0, 10);
   })();
 
-  const submitAction = async (path: string, body: unknown) => {
+  const submitAction = async (path: string, body?: unknown, method: "POST" | "DELETE" = "POST") => {
     setOperationError("");
     try {
-      const result = await action.mutateAsync({ path, body });
+      const result = await action.mutateAsync({ path, body, method });
       return result;
     } catch (error) {
       setOperationError(error instanceof Error ? error.message : "The fee request could not be completed.");
@@ -78,11 +78,14 @@ export function AdminFees({ adminKey }: { adminKey: string }) {
       setOperationError("Enter a clear reason before continuing.");
       return;
     }
-    const result = await submitAction(confirmAction.path, bodyOverride ?? confirmAction.body);
+    const result = await submitAction(confirmAction.path, bodyOverride ?? confirmAction.body, confirmAction.method ?? "POST");
     if (result !== null) {
       if (confirmAction.path === "/run") {
         const maybeResults = (result as { results?: FeeAssessment[] })?.results;
         setRunResults(Array.isArray(maybeResults) ? maybeResults : []);
+      }
+      if (confirmAction.method === "DELETE" && confirmAction.path.startsWith("/schedules/") && confirmAction.path.endsWith(`/${selectedSchedule}`)) {
+        setSelectedSchedule("");
       }
       setConfirmAction(null);
       setReason("");
@@ -203,6 +206,34 @@ export function AdminFees({ adminKey }: { adminKey: string }) {
               Offer to client
             </Button>
             <p className="mt-3 text-[11px] text-slate-500">Currency: CAD · Billing timezone: {BILLING_TIME_ZONE}. The next date is calculated by the service.</p>
+            {overview.schedules.length > 0 && (
+              <div className="mt-4 border-t border-slate-700 pt-3">
+                <p className="label-caps text-slate-400">Saved schedule versions</p>
+                <div className="mt-2 max-h-44 space-y-1.5 overflow-y-auto pr-1">
+                  {overview.schedules.map(s => (
+                    <div key={s.id} className="flex items-center justify-between gap-2 border border-slate-700/80 bg-slate-900/40 px-2.5 py-1.5 text-xs">
+                      <span className="truncate text-slate-300">{s.name} · v{s.version} · {formatCAD(s.total)}</span>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        disabled={mutationBusy}
+                        className="h-6 px-2 text-rose-300 hover:bg-rose-500/10 hover:text-rose-200"
+                        data-testid={`button-delete-schedule-${s.id}`}
+                        onClick={() => askConfirm({
+                          path: `/schedules/${s.id}`,
+                          method: "DELETE",
+                          title: `Delete schedule "${s.name} v${s.version}"?`,
+                          consequence: "This permanently deletes this fee schedule version along with any dependent enrollments, fee assessments, and linked fee audit entries.",
+                        })}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </section>
@@ -235,6 +266,9 @@ export function AdminFees({ adminKey }: { adminKey: string }) {
                       {contract.state === "active" && <Button size="sm" variant="outline" disabled={mutationBusy} className="border-slate-600 text-white" onClick={() => askConfirm({ path: `/management/${contract.id}/state`, body: { state: "paused" }, title: "Pause management contract?", consequence: "Pausing skips unbilled anniversary dates during the pause on resumption. No proration; recorded assessments remain unchanged." })}>Pause</Button>}
                       {contract.state === "paused" && <Button size="sm" variant="outline" disabled={mutationBusy} className="border-slate-600 text-white" onClick={() => askConfirm({ path: `/management/${contract.id}/state`, body: { state: "active" }, title: "Resume management contract?", consequence: "The contract resumes prospectively. Anniversary dates skipped while paused are not billed; no proration applies." })}>Resume</Button>}
                       {contract.state !== "ended" && <Button size="sm" variant="outline" disabled={mutationBusy} className="border-rose-900 text-rose-200" onClick={() => askConfirm({ path: `/management/${contract.id}/state`, body: { state: "ended" }, title: "End management contract?", consequence: "Future management assessments stop. Historical charges remain in the account ledger." })}>End</Button>}
+                      <Button size="sm" variant="outline" disabled={mutationBusy} className="border-rose-500/40 text-rose-300 hover:bg-rose-500/10" data-testid={`button-delete-management-${contract.id}`} onClick={() => askConfirm({ path: `/management/${contract.id}`, method: "DELETE", title: `Delete management contract #${contract.id}?`, consequence: "This permanently deletes the management contract, its recorded valuations, and dependent management fee assessments and audit entries." })}>
+                        <Trash2 className="mr-1 h-3.5 w-3.5" /> Delete
+                      </Button>
                     </div>
                   </div>
                   <details className="mt-3"><summary className="cursor-pointer text-xs text-slate-400">Full contract terms</summary><p className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-slate-400">{contract.terms}</p></details>
@@ -301,6 +335,9 @@ export function AdminFees({ adminKey }: { adminKey: string }) {
                   {enrollment.state === "active" && <Button size="sm" variant="outline" disabled={mutationBusy} className="border-slate-600 text-white" onClick={() => askConfirm({ path: `/enrollments/${enrollment.id}/state`, body: { state: "paused" }, title: "Pause enrollment?", consequence: "Future fee processing will stop for this enrollment until it is resumed. Existing assessments are unchanged." })}>Pause</Button>}
                   {enrollment.state === "paused" && <Button size="sm" variant="outline" disabled={mutationBusy} className="border-slate-600 text-white" onClick={() => askConfirm({ path: `/enrollments/${enrollment.id}/state`, body: { state: "active" }, title: "Resume enrollment?", consequence: "This enrollment will again be eligible for future scheduled assessments under its accepted schedule." })}>Resume</Button>}
                   {enrollment.state !== "ended" && <Button size="sm" variant="outline" disabled={mutationBusy} className="border-rose-900 text-rose-200" onClick={() => askConfirm({ path: `/enrollments/${enrollment.id}/state`, body: { state: "ended" }, title: "End this enrollment?", consequence: "This stops future fees for this enrollment. Existing assessed charges remain in the ledger and are not automatically waived." })}>End</Button>}
+                  <Button size="sm" variant="outline" disabled={mutationBusy} className="border-rose-500/40 text-rose-300 hover:bg-rose-500/10" data-testid={`button-delete-enrollment-${enrollment.id}`} onClick={() => askConfirm({ path: `/enrollments/${enrollment.id}`, method: "DELETE", title: `Delete enrollment #${enrollment.id}?`, consequence: "This permanently removes this fee enrollment along with its dependent fee assessments and fee audit entries." })}>
+                    <Trash2 className="mr-1 h-3.5 w-3.5" /> Delete
+                  </Button>
                 </div>
               </div>
               <button type="button" className="mt-3 flex items-center gap-1 text-xs text-slate-400 hover:text-white" onClick={() => setOpenTerms(openTerms === enrollment.id ? null : enrollment.id)}>
@@ -321,18 +358,40 @@ export function AdminFees({ adminKey }: { adminKey: string }) {
           <div className="divide-y divide-slate-700 lg:border-r lg:border-slate-700">
             <h3 className="label-caps px-5 py-3 text-slate-500">Assessment history</h3>
             {overview.assessments.length === 0 ? <p className="p-5 text-sm text-slate-400">No assessments recorded.</p> : overview.assessments.map((assessment: FeeAssessment) => (
-              <AssessmentRow key={assessment.id} assessment={assessment} accountName={nameForAccount(assessment.accountId)} pending={mutationBusy} onAction={(name) => askConfirm({
-                path: `/assessments/${assessment.id}/${name}`,
-                body: { confirmed: true, reason: "" },
-                title: `${name[0].toUpperCase()}${name.slice(1)} assessment ${assessment.id}?`,
-                consequence: name === "retry" ? "A new attempt will be made for this assessment against available recorded cash; no partial payment or overdraft." : name === "waive" ? "This marks the unpaid or skipped assessment as waived. It will remain in history and will not be collected." : "This records a one-time refund against the paid assessment. The original payment remains visible in history.",
-              })} />
+              <AssessmentRow key={assessment.id} assessment={assessment} accountName={nameForAccount(assessment.accountId)} pending={mutationBusy}
+                onAction={(name) => askConfirm({
+                  path: `/assessments/${assessment.id}/${name}`,
+                  body: { confirmed: true, reason: "" },
+                  title: `${name[0].toUpperCase()}${name.slice(1)} assessment ${assessment.id}?`,
+                  consequence: name === "retry" ? "A new attempt will be made for this assessment against available recorded cash; no partial payment or overdraft." : name === "waive" ? "This marks the unpaid or skipped assessment as waived. It will remain in history and will not be collected." : "This records a one-time refund against the paid assessment. The original payment remains visible in history.",
+                })}
+                onDelete={() => askConfirm({
+                  path: `/assessments/${assessment.id}`,
+                  method: "DELETE",
+                  title: `Delete assessment #${assessment.id}?`,
+                  consequence: "This permanently removes this fee assessment record and its linked fee audit entries. Linked ledger transactions, if any, remain in the main ledger unless deleted separately.",
+                })}
+              />
             ))}
           </div>
           <div className="divide-y divide-slate-700">
             <h3 className="label-caps px-5 py-3 text-slate-500">Audit trail</h3>
             {overview.audit.length === 0 ? <p className="p-5 text-sm text-slate-400">No audit events recorded.</p> : [...overview.audit].reverse().map(entry => <div key={entry.id} className="p-4">
-              <div className="flex justify-between gap-3"><span className="text-sm font-medium text-white">{entry.action}</span><span className="text-[10px] text-slate-500">{dateLabel(entry.createdAt)}</span></div>
+              <div className="flex items-start justify-between gap-3">
+                <span className="text-sm font-medium text-white">{entry.action}</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-slate-500">{dateLabel(entry.createdAt)}</span>
+                  <Button type="button" size="sm" variant="ghost" disabled={mutationBusy} className="h-6 px-1.5 text-rose-300 hover:bg-rose-500/10 hover:text-rose-200" data-testid={`button-delete-fee-audit-${entry.id}`}
+                    onClick={() => askConfirm({
+                      path: `/audit/${entry.id}`,
+                      method: "DELETE",
+                      title: `Delete fee audit entry #${entry.id}?`,
+                      consequence: `This permanently removes the "${entry.action}" audit event from the database.`,
+                    })}>
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
               <p className="mt-1 text-xs text-slate-400">By {entry.actor}{entry.enrollmentId ? ` · enrollment ${entry.enrollmentId}` : ""}{entry.assessmentId ? ` · assessment ${entry.assessmentId}` : ""}</p>
               <pre className="mt-2 whitespace-pre-wrap break-words text-[10px] text-slate-500">{JSON.stringify(entry.detail)}</pre>
             </div>)}
@@ -342,14 +401,14 @@ export function AdminFees({ adminKey }: { adminKey: string }) {
 
       {confirmAction && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="presentation">
         <div role="dialog" aria-modal="true" aria-labelledby="fee-confirm-title" className="w-full max-w-lg border border-slate-600 bg-[#10221b] p-5 shadow-2xl">
-          <p className="label-caps text-amber-300">Confirm fee action</p><h2 id="fee-confirm-title" className="mt-2 font-serif text-2xl text-white">{confirmAction.title}</h2><p className="mt-3 text-sm leading-relaxed text-slate-300">{confirmAction.consequence}</p>
+          <p className="label-caps text-amber-300">{confirmAction.method === "DELETE" ? "Confirm permanent deletion" : "Confirm fee action"}</p><h2 id="fee-confirm-title" className="mt-2 font-serif text-2xl text-white">{confirmAction.title}</h2><p className="mt-3 text-sm leading-relaxed text-slate-300">{confirmAction.consequence}</p>
           {["retry", "waive", "refund"].some(name => confirmAction.path.endsWith(`/${name}`)) && <div className="mt-4"><label className="label-caps text-slate-400" htmlFor="fee-action-reason">Required reason</label><Textarea id="fee-action-reason" value={reason} onChange={e => setReason(e.target.value)} className="mt-1 border-slate-600 bg-slate-900 text-white" placeholder="Record the reason for this action" /></div>}
           {operationError && <p role="alert" className="mt-3 text-sm text-rose-300">{operationError}</p>}
           <div className="mt-5 flex justify-end gap-2"><Button variant="outline" className="border-slate-600 text-slate-200" disabled={mutationBusy} onClick={() => setConfirmAction(null)}>Cancel</Button>
-            <Button className="bg-amber-500 text-slate-950 hover:bg-amber-400" disabled={mutationBusy || (["retry", "waive", "refund"].some(name => confirmAction.path.endsWith(`/${name}`)) && reason.trim().length < 3)} onClick={() => {
+            <Button className={confirmAction.method === "DELETE" ? "bg-rose-600 text-white hover:bg-rose-500" : "bg-amber-500 text-slate-950 hover:bg-amber-400"} disabled={mutationBusy || (["retry", "waive", "refund"].some(name => confirmAction.path.endsWith(`/${name}`)) && reason.trim().length < 3)} onClick={() => {
               const body = ["retry", "waive", "refund"].some(name => confirmAction.path.endsWith(`/${name}`)) ? { confirmed: true, reason: reason.trim() } : undefined;
               void runConfirmedAction(body);
-            }}>{mutationBusy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Confirm action</Button>
+            }}>{mutationBusy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{confirmAction.method === "DELETE" ? "Delete permanently" : "Confirm action"}</Button>
           </div>
         </div>
       </div>}
@@ -357,11 +416,16 @@ export function AdminFees({ adminKey }: { adminKey: string }) {
   );
 }
 
-function AssessmentRow({ assessment, accountName, pending, onAction }: { assessment: FeeAssessment; accountName: string; pending: boolean; onAction: (action: "retry" | "waive" | "refund") => void }) {
+function AssessmentRow({ assessment, accountName, pending, onAction, onDelete }: { assessment: FeeAssessment; accountName: string; pending: boolean; onAction: (action: "retry" | "waive" | "refund") => void; onDelete: () => void }) {
   return <div className="p-4">
     <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
       <div><div className="flex flex-wrap items-center gap-2"><span className="text-sm font-semibold text-white">Assessment {assessment.id} · {assessment.kind === "management" ? "annual management" : "monthly services"}</span><span className="label-caps border border-slate-600 px-2 py-0.5 text-slate-300">{assessment.status}</span></div><p className="mt-1 text-xs text-slate-400">{accountName} · period {assessment.period + 1} · {dateLabel(assessment.dueDate)}{assessment.contractId ? ` · contract ${assessment.contractId}` : ""} · {assessment.funding === "fee_overdraft" ? "authorized fee overdraft" : "cash only"}{assessment.transactionId ? ` · ledger transaction ${assessment.transactionId}` : ""}</p>{assessment.reason && <p className="mt-1 text-xs text-slate-500">Reason: {assessment.reason}</p>}</div>
-      <span className="font-mono text-sm tabular-nums text-amber-300">{formatCAD(assessment.total)}</span>
+      <div className="flex items-center gap-2">
+        <span className="font-mono text-sm tabular-nums text-amber-300">{formatCAD(assessment.total)}</span>
+        <Button type="button" size="sm" variant="ghost" disabled={pending} className="h-6 px-1.5 text-rose-300 hover:bg-rose-500/10 hover:text-rose-200" data-testid={`button-delete-assessment-${assessment.id}`} onClick={onDelete}>
+          <Trash2 className="h-3.5 w-3.5" />
+        </Button>
+      </div>
     </div>
     <details className="mt-2 text-xs text-slate-400"><summary className="cursor-pointer">Itemization and calculation</summary>
       {assessment.components.map(item => <p key={item.name} className="mt-1 flex justify-between gap-3"><span>{item.name}</span><span className="font-mono">{formatCAD(item.amount)}</span></p>)}

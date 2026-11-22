@@ -27,6 +27,7 @@ import {
   RotateCcw,
   ShieldAlert,
   ShieldCheck,
+  Trash2,
   UserCheck,
   XCircle,
 } from "lucide-react";
@@ -267,6 +268,38 @@ export function AdminTransactions({ adminKey, currentStaff, allUsers }: AdminTra
       invalidateAll();
     },
     onError: (err: any) => toast({ title: "Rejection Failed", description: err.message, variant: "destructive" }),
+  });
+
+  // ── Admin Delete Confirmation ────────────────────────────────────────────────
+  const [deleteTarget, setDeleteTarget] = useState<{
+    kind: "transaction" | "posting" | "audit";
+    id: number;
+    title: string;
+    summary: string;
+    isCompletedTxn?: boolean;
+  } | null>(null);
+  const [reverseBalanceOnDelete, setReverseBalanceOnDelete] = useState(true);
+
+  const deleteRecordMutation = useMutation({
+    mutationFn: async (target: NonNullable<typeof deleteTarget>) => {
+      const path =
+        target.kind === "transaction"
+          ? `/api/admin/transactions/${target.id}?reverseBalance=${target.isCompletedTxn && reverseBalanceOnDelete ? "true" : "false"}`
+          : target.kind === "posting"
+            ? `/api/admin/postings/${target.id}`
+            : `/api/admin/audit-trail/${target.id}`;
+      const r = await adminFetch(path, adminKey, { method: "DELETE" });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data?.message || `Failed to delete record (HTTP ${r.status})`);
+      return data;
+    },
+    onSuccess: (data) => {
+      toast({ title: "Record Deleted", description: data?.message || "Database record removed." });
+      setDeleteTarget(null);
+      invalidateAll();
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/fees"] });
+    },
+    onError: (err: any) => toast({ title: "Delete Failed", description: err.message, variant: "destructive" }),
   });
 
   // ── Create Posting Form + Preview ────────────────────────────────────────────
@@ -607,6 +640,25 @@ export function AdminTransactions({ adminKey, currentStaff, allUsers }: AdminTra
                             <XCircle className="w-3.5 h-3.5" />
                             Reject
                           </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setReverseBalanceOnDelete(false);
+                              setDeleteTarget({
+                                kind: "transaction",
+                                id: txn.id,
+                                title: `Delete client request TXN-${txn.id}?`,
+                                summary: `Permanently delete pending ${txn.direction || txn.transactionType || "transaction"} request (${formatCAD(txn.amount)}) for ${txn.userName || "client"} from the database.`,
+                                isCompletedTxn: false,
+                              });
+                            }}
+                            className="border-red-500/40 text-red-400 hover:bg-red-500/10 gap-1"
+                            data-testid={`button-delete-pending-txn-${txn.id}`}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            Delete
+                          </Button>
                         </div>
                       </div>
                     </div>
@@ -747,6 +799,23 @@ export function AdminTransactions({ adminKey, currentStaff, allUsers }: AdminTra
                               >
                                 <XCircle className="w-3.5 h-3.5" />
                                 Reject
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setDeleteTarget({
+                                    kind: "posting",
+                                    id: req.id,
+                                    title: `Delete posting request APR-${req.id}?`,
+                                    summary: `Permanently remove staff posting request APR-${req.id} (${formatCAD(req.amount)}) and its linked audit events.`,
+                                  });
+                                }}
+                                className="border-red-500/40 text-red-400 hover:bg-red-500/10 gap-1"
+                                data-testid={`button-delete-posting-${req.id}`}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                Delete
                               </Button>
                             </div>
                           </div>
@@ -1264,6 +1333,25 @@ export function AdminTransactions({ adminKey, currentStaff, allUsers }: AdminTra
                                   Reverse
                                 </Button>
                               )}
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-2 text-xs border-red-500/40 text-red-400 hover:bg-red-500/10"
+                                onClick={() => {
+                                  setReverseBalanceOnDelete(txn.status === "completed");
+                                  setDeleteTarget({
+                                    kind: "transaction",
+                                    id: txn.id,
+                                    title: `Delete transaction TXN-${txn.id}?`,
+                                    summary: `Permanently delete TXN-${txn.id} (${formatCAD(txn.amount)} · ${txn.status}) along with linked audit trail, historical balance references, and fee assessment links.`,
+                                    isCompletedTxn: txn.status === "completed",
+                                  });
+                                }}
+                                data-testid={`button-delete-txn-${txn.id}`}
+                              >
+                                <Trash2 className="w-3 h-3 mr-1" />
+                                Delete
+                              </Button>
                             </td>
                           </tr>
                         );
@@ -1304,7 +1392,24 @@ export function AdminTransactions({ adminKey, currentStaff, allUsers }: AdminTra
                         <p className="text-slate-300 mt-1">{ev.reason}</p>
                         {ev.evidenceRef && <p className="text-slate-400 font-mono mt-0.5">Ref: {ev.evidenceRef}</p>}
                       </div>
-                      <span className="text-slate-500 whitespace-nowrap">{new Date(ev.createdAt).toLocaleString()}</span>
+                      <div className="flex items-center gap-2 self-end sm:self-center">
+                        <span className="text-slate-500 whitespace-nowrap">{new Date(ev.createdAt).toLocaleString()}</span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 px-1.5 text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                          data-testid={`button-delete-audit-${ev.id}`}
+                          onClick={() => setDeleteTarget({
+                            kind: "audit",
+                            id: ev.id,
+                            title: `Delete audit event #${ev.id}?`,
+                            summary: `Permanently delete audit log event #${ev.id} (${ev.action.replace(/_/g, " ")}) from the database.`,
+                          })}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
                     </div>
                   ))}
                   {(!Array.isArray(globalAuditTrail) || globalAuditTrail.length === 0) && (
@@ -1623,6 +1728,50 @@ export function AdminTransactions({ adminKey, currentStaff, allUsers }: AdminTra
               onClick={() => reverseMutation.mutate()}
             >
               Queue Reversal for Second Admin
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Admin Delete Confirmation Dialog */}
+      <Dialog open={!!deleteTarget} onOpenChange={(o) => { if (!o && !deleteRecordMutation.isPending) setDeleteTarget(null); }}>
+        <DialogContent className="bg-slate-800 border-red-500/40 text-white max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-300">
+              <Trash2 className="w-4 h-4" />
+              {deleteTarget?.title}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2 text-xs">
+            <p className="text-slate-300 leading-relaxed">{deleteTarget?.summary}</p>
+            {deleteTarget?.kind === "transaction" && deleteTarget.isCompletedTxn && (
+              <label
+                htmlFor="delete-txn-reverse-balance"
+                className="flex items-start gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-slate-200 cursor-pointer"
+              >
+                <input
+                  id="delete-txn-reverse-balance"
+                  name="delete-txn-reverse-balance"
+                  type="checkbox"
+                  checked={reverseBalanceOnDelete}
+                  onChange={(e) => setReverseBalanceOnDelete(e.target.checked)}
+                  className="mt-0.5"
+                />
+                <span>
+                  Also reverse balance impact on affected account(s) if completed (recommended so account balances match remaining ledger records).
+                </span>
+              </label>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" disabled={deleteRecordMutation.isPending} onClick={() => setDeleteTarget(null)}>Cancel</Button>
+            <Button
+              className="bg-red-600 hover:bg-red-700 text-white"
+              disabled={deleteRecordMutation.isPending}
+              data-testid="button-confirm-delete-record"
+              onClick={() => deleteTarget && deleteRecordMutation.mutate(deleteTarget)}
+            >
+              {deleteRecordMutation.isPending ? "Deleting…" : "Delete Permanently"}
             </Button>
           </DialogFooter>
         </DialogContent>

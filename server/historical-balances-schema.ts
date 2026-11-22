@@ -50,6 +50,9 @@ export async function initializeHistoricalBalances(pool: Pool) {
       );
       CREATE OR REPLACE FUNCTION protect_historical_balance_evidence() RETURNS trigger AS $$
       BEGIN
+        IF TG_OP='DELETE' AND current_setting('veritas.admin_delete', true) = 'on' THEN
+          RETURN OLD;
+        END IF;
         RAISE EXCEPTION 'Historical balance evidence is immutable';
       END; $$ LANGUAGE plpgsql;
       CREATE TABLE IF NOT EXISTS transaction_date_corrections (

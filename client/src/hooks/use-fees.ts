@@ -74,7 +74,12 @@ export function useClientManagementAction(accountId: number) {
 }
 async function feeAdminRequest<T>(key: string, path: string, method = "GET", body?: unknown): Promise<T> {
   const res = await fetch(`/api/admin/fees${path}`, {
-    method, headers: { "Content-Type": "application/json", "x-admin-key": key },
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${key}`,
+      "x-admin-key": key,
+    },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const data = await res.json();
@@ -97,19 +102,19 @@ export function useFeePreview(adminKey: string) {
 }
 // POST paths: /schedules, /offers, /settings, /run,
 // /enrollments/:id/state, /assessments/:id/retry|waive|refund.
-// Bodies: schedule {name,components,terms}; offer {accountId,scheduleId,firstChargeDate,servicesConfirmed:true};
-// settings {enabled,confirmed:true}; state {state:'paused'|'active'|'ended'};
-// run {confirmed:true,previewToken:string}; retry/waive/refund {confirmed:true,reason:string}.
+// DELETE paths: /schedules/:id, /enrollments/:id, /management/:id, /assessments/:id, /audit/:id.
 export function useAdminFeeAction(adminKey: string) {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: ({ path, body }: { path: string; body: unknown }) => feeAdminRequest<FeeRunResult | unknown>(adminKey, path, "POST", body),
+    mutationFn: ({ path, body, method = "POST" }: { path: string; body?: unknown; method?: "POST" | "DELETE" }) =>
+      feeAdminRequest<FeeRunResult | unknown>(adminKey, path, method, body),
     onSuccess: () => {
       client.invalidateQueries({ queryKey: ["/api/admin/fees"] });
       client.invalidateQueries({ queryKey: ["/api/admin/fees/preview"] });
       client.invalidateQueries({ queryKey: ["/api/admin/transactions"] });
       client.invalidateQueries({ queryKey: ["/api/admin/users"] });
       client.invalidateQueries({ queryKey: ["/api/admin/stats"] });
+      client.invalidateQueries({ queryKey: ["/api/admin/audit-trail"] });
       client.invalidateQueries({ queryKey: ["/api/accounts"] });
       client.invalidateQueries({ queryKey: ["/api/fees"] });
     },

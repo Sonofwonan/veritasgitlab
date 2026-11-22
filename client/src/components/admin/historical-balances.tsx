@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Download, FileUp, History, ShieldCheck } from "lucide-react";
+import { AlertTriangle, Download, FileUp, History, ShieldCheck, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -60,12 +61,19 @@ export function HistoricalBalances({ adminKey, users }: { adminKey: string; user
   const applyingRef = useRef(false);
   const [sourceDigest, setSourceDigest] = useState<{ fileName: string; sha256: string } | null>(null);
   const [applied, setApplied] = useState<{ applied: boolean; importId: string; postingCount: number } | null>(null);
+  const [deleteImportTarget, setDeleteImportTarget] = useState<{ importId: string; postingCount?: number } | null>(null);
+  const [deletingImport, setDeletingImport] = useState(false);
+  const [deleteImportError, setDeleteImportError] = useState("");
+  const authHeaders = {
+    "Authorization": `Bearer ${adminKey}`,
+    "x-admin-key": adminKey,
+  };
 
   const accountQuery = useQuery<Account[]>({
     queryKey: ["/api/admin/users", userId, "history-accounts"],
     enabled: !!userId,
     queryFn: async () => {
-      const response = await fetch(`/api/admin/users/${userId}/accounts`, { headers: { "x-admin-key": adminKey } });
+      const response = await fetch(`/api/admin/users/${userId}/accounts`, { headers: authHeaders });
       const result = await responseJson<Account[] | { accounts: Account[] }>(response);
       return Array.isArray(result) ? result : result.accounts;
     },
@@ -75,9 +83,32 @@ export function HistoricalBalances({ adminKey, users }: { adminKey: string; user
     queryKey: ["/api/admin/history/imports", accountId],
     enabled: !!accountId,
     queryFn: async () => responseJson<any[]>(await fetch(`/api/admin/history/imports?accountId=${encodeURIComponent(accountId)}`, {
-      headers: { "x-admin-key": adminKey },
+      headers: authHeaders,
     })),
   });
+
+  const confirmDeleteImport = async () => {
+    if (!deleteImportTarget) return;
+    setDeletingImport(true);
+    setDeleteImportError("");
+    try {
+      await responseJson(await fetch(`/api/admin/history/imports/${encodeURIComponent(deleteImportTarget.importId)}`, {
+        method: "DELETE",
+        headers: authHeaders,
+      }));
+      setDeleteImportTarget(null);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/history/imports", accountId] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/transactions"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/accounts"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] }),
+      ]);
+    } catch (cause) {
+      setDeleteImportError(cause instanceof Error ? cause.message : "Could not delete historical import.");
+    } finally {
+      setDeletingImport(false);
+    }
+  };
 
   useEffect(() => {
     if (!previewExpiresAt || !preview) return;
@@ -164,7 +195,7 @@ export function HistoricalBalances({ adminKey, users }: { adminKey: string; user
       setJsonText(JSON.stringify(input, null, 2));
       const result = await responseJson<HistoryPreview>(await fetch("/api/admin/history/preview", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-admin-key": adminKey },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify(input),
       }));
       setPreview(result);
@@ -198,7 +229,7 @@ export function HistoricalBalances({ adminKey, users }: { adminKey: string; user
       const result = await responseJson<{ applied: boolean; importId: string; postingCount: number }>(
         await fetch("/api/admin/history/apply", {
           method: "POST",
-          headers: { "Content-Type": "application/json", "x-admin-key": adminKey },
+          headers: { "Content-Type": "application/json", ...authHeaders },
           body: JSON.stringify({ previewId: preview.previewId, confirm: true }),
         }),
       );
@@ -386,12 +417,50 @@ export function HistoricalBalances({ adminKey, users }: { adminKey: string; user
               : auditQuery.isError ? <p role="alert" className="text-sm text-red-200">Audit history could not be loaded. <button className="underline" onClick={() => void auditQuery.refetch()}>Retry</button></p>
                 : !auditQuery.data?.length ? <p className="text-sm text-slate-400">No historical imports recorded for this account.</p>
                   : <ul className="space-y-2">{auditQuery.data.map((entry, index) => <li key={entry.importId || entry.id || index} className="border border-slate-700 p-3 text-sm">
-                    <div className="flex flex-wrap justify-between gap-2"><span className="font-mono text-slate-200">{entry.importId || `Import ${entry.id || index + 1}`}</span>
-                      <span className="text-xs text-slate-400">{entry.createdAt ? new Date(entry.createdAt).toLocaleString() : ""}</span></div>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-mono text-slate-200">{entry.importId || `Import ${entry.id || index + 1}`}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-slate-400">{entry.createdAt ? new Date(entry.createdAt).toLocaleString() : ""}</span>
+                        {entry.importId && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-7 border-red-500/40 px-2 text-xs text-red-300 hover:bg-red-500/10"
+                            data-testid={`button-delete-history-import-${entry.importId}`}
+                            onClick={() => {
+                              setDeleteImportError("");
+                              setDeleteImportTarget({ importId: entry.importId, postingCount: entry.postingCount ?? entry.count });
+                            }}
+                          >
+                            <Trash2 className="mr-1 h-3.5 w-3.5" />
+                            Delete
+                          </Button>
+                        )}
+                      </div>
+                    </div>
                     <p className="mt-1 text-xs text-slate-400">{entry.postingCount ?? entry.count ?? "—"} postings · {entry.sourceReference || entry.source?.reference || "Source reference unavailable"}</p>
                   </li>)}</ul>}
         </CardContent>
       </Card>
+
+      <Dialog open={deleteImportTarget !== null} onOpenChange={open => { if (!open && !deletingImport) setDeleteImportTarget(null); }}>
+        <DialogContent className="border-slate-700 bg-slate-900 text-white sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-red-300">Delete historical balance import?</DialogTitle>
+            <DialogDescription className="text-slate-300">
+              {deleteImportTarget ? `Permanently delete import ${deleteImportTarget.importId} along with its recorded postings, date corrections, and preview?` : ""}
+            </DialogDescription>
+          </DialogHeader>
+          {deleteImportError && <p role="alert" className="text-sm text-red-300">{deleteImportError}</p>}
+          <DialogFooter className="gap-2">
+            <Button type="button" variant="ghost" disabled={deletingImport} className="text-slate-300" onClick={() => setDeleteImportTarget(null)}>Cancel</Button>
+            <Button type="button" disabled={deletingImport} className="bg-red-600 text-white hover:bg-red-700" onClick={() => void confirmDeleteImport()}>
+              Delete permanently
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

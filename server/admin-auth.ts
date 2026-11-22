@@ -122,7 +122,7 @@ export async function initializeAdminTables(pool: Pool) {
       target_transaction_id INTEGER,
       replacement_payload TEXT,
       status TEXT NOT NULL DEFAULT 'pending_second_admin',
-      created_by_staff_id INTEGER NOT NULL REFERENCES staff_admins(id),
+      created_by_staff_id INTEGER REFERENCES staff_admins(id),
       created_by_staff_username TEXT NOT NULL,
       created_by_staff_name TEXT NOT NULL,
       reviewed_by_staff_id INTEGER REFERENCES staff_admins(id),
@@ -135,6 +135,7 @@ export async function initializeAdminTables(pool: Pool) {
       replacement_transaction_id INTEGER,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    ALTER TABLE admin_posting_requests ALTER COLUMN created_by_staff_id DROP NOT NULL;
     CREATE INDEX IF NOT EXISTS admin_posting_requests_status_idx ON admin_posting_requests(status, created_at DESC);
 
     CREATE TABLE IF NOT EXISTS transaction_audit_trail (
@@ -524,6 +525,57 @@ export async function setupAdminAuth(app: Express, pool: Pool) {
         return void res.status(400).json({ message: error.issues[0]?.message || "Invalid request" });
       }
       res.status(500).json({ message: "Failed to update staff administrator" });
+    }
+  });
+
+  app.delete("/api/admin/staff/:id", requireAdmin, async (req, res) => {
+    try {
+      if (!req.adminStaff && !getConfiguredAdminPassword()) {
+        return void res.status(403).json({ message: "Administrator authorization required" });
+      }
+      const id = z.coerce.number().int().positive().parse(req.params.id);
+      if (req.adminStaff && id === req.adminStaff.id) {
+        return void res.status(400).json({ message: "You cannot delete your own active administrator account." });
+      }
+      if (!hasDatabaseConfig) {
+        const index = memoryStaff.findIndex(s => s.id === id);
+        if (index === -1) return void res.status(404).json({ message: "Staff administrator not found" });
+        const [removed] = memoryStaff.splice(index, 1);
+        for (const [digestKey, sess] of memorySessions.entries()) {
+          if (sess.staffId === id) memorySessions.delete(digestKey);
+        }
+        return void res.json({ ok: true, id: removed.id });
+      }
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const { rows: [existing] } = await client.query(
+          `SELECT id FROM staff_admins WHERE id = $1 FOR UPDATE`,
+          [id],
+        );
+        if (!existing) {
+          await client.query("ROLLBACK");
+          return void res.status(404).json({ message: "Staff administrator not found" });
+        }
+        await client.query(`DELETE FROM admin_sessions WHERE staff_id = $1`, [id]);
+        await client.query(`UPDATE staff_admins SET created_by_staff_id = NULL WHERE created_by_staff_id = $1`, [id]);
+        await client.query(`UPDATE admin_posting_requests SET created_by_staff_id = NULL WHERE created_by_staff_id = $1`, [id]);
+        await client.query(`UPDATE admin_posting_requests SET reviewed_by_staff_id = NULL WHERE reviewed_by_staff_id = $1`, [id]);
+        await client.query(`DELETE FROM staff_admins WHERE id = $1`, [id]);
+        await client.query("COMMIT");
+        res.json({ ok: true, id });
+      } catch (err) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw err;
+      } finally {
+        client.release();
+      }
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return void res.status(400).json({ message: error.issues[0]?.message || "Invalid staff ID" });
+      }
+      console.error("[admin-auth] Delete staff error:", error);
+      res.status(500).json({ message: "Failed to delete staff administrator" });
     }
   });
 

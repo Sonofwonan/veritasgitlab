@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { Trash2 } from "lucide-react";
 import { adminRecoveryRequestPath, type RecoveryRequest } from "@shared/client-settings";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,10 +13,21 @@ export function AdminRecoveryRequests({ adminKey }: { adminKey: string }) {
   const [verified, setVerified] = useState(false);
   const [codes, setCodes] = useState<string[] | null>(null);
   const [error, setError] = useState("");
-  const request = async (path: string, body?: object) => {
-    const response = await fetch(path, { method: body ? "POST" : "GET", headers: {
-      "x-admin-key": adminKey, ...(body ? { "Content-Type": "application/json" } : {}),
-    }, ...(body ? {body: JSON.stringify(body)} : {}), cache: "no-store" });
+  const [deleteTarget, setDeleteTarget] = useState<RecoveryRequest | null>(null);
+  const [deleteError, setDeleteError] = useState("");
+
+  const request = async (path: string, body?: object, method?: "GET" | "POST" | "DELETE") => {
+    const resolvedMethod = method ?? (body ? "POST" : "GET");
+    const response = await fetch(path, {
+      method: resolvedMethod,
+      headers: {
+        "Authorization": `Bearer ${adminKey}`,
+        "x-admin-key": adminKey,
+        ...(body ? { "Content-Type": "application/json" } : {}),
+      },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+      cache: "no-store",
+    });
     const result = await response.json();
     if (!response.ok) throw new Error(result.message || "The request could not be completed.");
     return result;
@@ -27,7 +39,7 @@ export function AdminRecoveryRequests({ adminKey }: { adminKey: string }) {
   const review = useMutation({
     gcTime: 0,
     mutationFn: async (action: "issue" | "reject") =>
-      request(`${adminRecoveryRequestPath}/${selected!.id}/${action}`, { identityVerified: verified }),
+      request(`${adminRecoveryRequestPath}/${selected!.id}/${action}`, { identityVerified: verified }, "POST"),
     onSuccess: result => {
       if (result.recoveryCodes) setCodes(result.recoveryCodes);
       else setSelected(null);
@@ -35,6 +47,16 @@ export function AdminRecoveryRequests({ adminKey }: { adminKey: string }) {
       void requests.refetch();
     },
     onError: (e: Error) => setError(e.message),
+  });
+  const deleteMutation = useMutation({
+    gcTime: 0,
+    mutationFn: async (id: number) => request(`${adminRecoveryRequestPath}/${id}`, undefined, "DELETE"),
+    onSuccess: () => {
+      setDeleteTarget(null);
+      setDeleteError("");
+      void requests.refetch();
+    },
+    onError: (e: Error) => setDeleteError(e.message),
   });
   const close = () => { setSelected(null); setVerified(false); setCodes(null); setError(""); review.reset(); };
   return (
@@ -51,8 +73,20 @@ export function AdminRecoveryRequests({ adminKey }: { adminKey: string }) {
               <div><p className="font-medium">{item.name}</p>
                 <p className="text-sm text-slate-300">{item.clientRef} · {new Date(item.createdAt).toLocaleDateString("en-GB")}</p>
               </div>
-              {item.status === "pending" ? <Button onClick={() => { setSelected(item); setVerified(false); setError(""); }}>Review request</Button>
-                : <span className="text-sm capitalize">{item.status}</span>}
+              <div className="flex items-center gap-2">
+                {item.status === "pending" ? <Button onClick={() => { setSelected(item); setVerified(false); setError(""); }}>Review request</Button>
+                  : <span className="text-sm capitalize">{item.status}</span>}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-red-500/40 text-red-400 hover:bg-red-500/10"
+                  data-testid={`button-delete-recovery-${item.id}`}
+                  onClick={() => { setDeleteError(""); setDeleteTarget(item); }}
+                >
+                  <Trash2 className="mr-1 h-3.5 w-3.5" />
+                  Delete
+                </Button>
+              </div>
             </div>)}
           </div>
         )}
@@ -80,6 +114,24 @@ export function AdminRecoveryRequests({ adminKey }: { adminKey: string }) {
                 <Button variant="ghost" disabled={review.isPending} onClick={close}>Cancel</Button>
               </div>
             </>}
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={deleteTarget !== null} onOpenChange={open => { if (!open && !deleteMutation.isPending) setDeleteTarget(null); }}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Delete recovery-code request?</DialogTitle>
+              <DialogDescription>
+                {deleteTarget ? `Permanently delete recovery request #${deleteTarget.id} for ${deleteTarget.name} (${deleteTarget.clientRef})?` : ""}
+              </DialogDescription>
+            </DialogHeader>
+            {deleteError && <p role="alert" className="text-sm text-destructive">{deleteError}</p>}
+            <DialogFooter className="gap-2">
+              <Button variant="ghost" disabled={deleteMutation.isPending} onClick={() => setDeleteTarget(null)}>Cancel</Button>
+              <Button variant="destructive" disabled={deleteMutation.isPending} onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}>
+                Delete permanently
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </CardContent>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Eye, EyeOff, RefreshCw, ShieldAlert } from "lucide-react";
+import { Eye, EyeOff, RefreshCw, ShieldAlert, Trash2 } from "lucide-react";
 import { accountLabel } from "@shared/account-display";
 import { clientBalanceCurrency, formatBalance, type BalanceCurrency } from "@shared/balance-currency";
 import type { ClientFeeSummary } from "@shared/fees";
@@ -57,6 +57,17 @@ export function ClientCurrencyPanel({
   const [saveError, setSaveError] = useState("");
   const [saving, setSaving] = useState(false);
   const [refreshedDisplayCurrency, setRefreshedDisplayCurrency] = useState<BalanceCurrency | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<
+    | { kind: "account"; id: number; label: string }
+    | { kind: "audit"; id: number; label: string }
+    | null
+  >(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const authHeaders = {
+    "Authorization": `Bearer ${adminKey}`,
+    "x-admin-key": adminKey,
+  };
   const auditQuery = useQuery<Array<{
     id: number; actor: string; previousCurrency: BalanceCurrency; displayCurrency: BalanceCurrency;
     reason: string; createdAt: string;
@@ -65,7 +76,7 @@ export function ClientCurrencyPanel({
     enabled: open && !!user,
     staleTime: 0,
     queryFn: async () => readResponse(await fetch(`/api/admin/users/${user!.id}/display-currency/audit`, {
-      headers: { "x-admin-key": adminKey },
+      headers: authHeaders,
     })),
   });
 
@@ -77,6 +88,8 @@ export function ClientCurrencyPanel({
       setHidden(false);
       setSaveError("");
       setRefreshedDisplayCurrency(null);
+      setDeleteTarget(null);
+      setDeleteError("");
     }
   }, [open, user?.id]);
 
@@ -86,7 +99,7 @@ export function ClientCurrencyPanel({
     staleTime: 0,
     queryFn: async () => {
       const response = await fetch(`/api/admin/users/${user!.id}/accounts`, {
-        headers: { "x-admin-key": adminKey },
+        headers: authHeaders,
       });
       const result = await readResponse<ClientAccount[] | { accounts: ClientAccount[] }>(response);
       return Array.isArray(result) ? result : result.accounts;
@@ -99,7 +112,7 @@ export function ClientCurrencyPanel({
     staleTime: 0,
     queryFn: async () => {
       const response = await fetch(`/api/admin/fees/clients/${user!.id}/summary`, {
-        headers: { "x-admin-key": adminKey },
+        headers: authHeaders,
       });
       return readResponse<ClientFeeSummary>(response);
     },
@@ -108,6 +121,37 @@ export function ClientCurrencyPanel({
   const feeSummary = feesQuery.isError ? undefined : feesQuery.data;
   const displayCurrency = refreshedDisplayCurrency || clientBalanceCurrency(user || undefined);
 
+  const confirmDelete = async () => {
+    if (!deleteTarget || !user) return;
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      const path = deleteTarget.kind === "account"
+        ? `/api/admin/accounts/${deleteTarget.id}`
+        : `/api/admin/display-currency/audit/${deleteTarget.id}`;
+      await readResponse(await fetch(path, {
+        method: "DELETE",
+        headers: authHeaders,
+      }));
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/users", user.id, "accounts"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/users", user.id, "display-currency", "audit"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/accounts"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/transactions"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/postings"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/fees"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/audit-trail"] }),
+      ]);
+      setDeleteTarget(null);
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : "Could not delete the record.");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const saveCurrency = async () => {
     if (!user || !confirmed || !reason.trim() || reason.trim().length > 500) return;
     setSaving(true);
@@ -115,7 +159,7 @@ export function ClientCurrencyPanel({
     try {
       const response = await fetch(`/api/admin/users/${user.id}/display-currency`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", "x-admin-key": adminKey },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify({
           displayCurrency: currency,
           expectedDisplayCurrency: refreshedDisplayCurrency || user.displayCurrency || "CAD",
@@ -229,9 +273,25 @@ export function ClientCurrencyPanel({
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <div>
                           <p className="font-medium text-slate-100">{accountLabel(account)}</p>
-                          <p className="text-xs text-slate-500">{account.accountType}</p>
+                          <p className="text-xs text-slate-500">{account.accountType} · #{account.id}</p>
                         </div>
-                        <p className="font-mono text-sm font-semibold tabular-nums">{money(account.balance)}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-mono text-sm font-semibold tabular-nums">{money(account.balance)}</p>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={saving || deleting}
+                            className="h-7 border-red-500/40 px-2 text-xs text-red-300 hover:bg-red-500/10"
+                            data-testid={`button-delete-account-${account.id}`}
+                            onClick={() => {
+                              setDeleteError("");
+                              setDeleteTarget({ kind: "account", id: account.id, label: `${accountLabel(account)} (#${account.id})` });
+                            }}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
                       </div>
                       {fee && account.balance !== undefined && (
                         <AccountFeeBalance
@@ -290,7 +350,23 @@ export function ClientCurrencyPanel({
               : !auditQuery.data?.length ? <p className="text-sm text-slate-400">No staff changes recorded.</p>
               : <ul className="mt-2 space-y-2 text-sm text-slate-300">{auditQuery.data.map(entry =>
                 <li key={entry.id} className="border border-slate-700 p-2">
-                  {entry.previousCurrency === "GBP" ? "£" : "CAD"} → {entry.displayCurrency === "GBP" ? "£" : "CAD"} · {entry.actor} · {new Date(entry.createdAt).toLocaleString()}
+                  <div className="flex items-start justify-between gap-2">
+                    <span>{entry.previousCurrency === "GBP" ? "£" : "CAD"} → {entry.displayCurrency === "GBP" ? "£" : "CAD"} · {entry.actor} · {new Date(entry.createdAt).toLocaleString()}</span>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      disabled={saving || deleting}
+                      className="h-6 px-1.5 text-red-300 hover:bg-red-500/10 hover:text-red-200"
+                      data-testid={`button-delete-currency-audit-${entry.id}`}
+                      onClick={() => {
+                        setDeleteError("");
+                        setDeleteTarget({ kind: "audit", id: entry.id, label: `Currency audit entry #${entry.id}` });
+                      }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                   <p className="mt-1 break-words">{entry.reason}</p>
                   <p className="text-xs text-slate-500">Confirmed · Presentation only</p>
                 </li>)}</ul>}
@@ -309,6 +385,27 @@ export function ClientCurrencyPanel({
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      <Dialog open={!!deleteTarget} onOpenChange={next => { if (!next && !deleting) setDeleteTarget(null); }}>
+        <DialogContent className="border-slate-700 bg-slate-900 text-white sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-red-300">Confirm permanent deletion</DialogTitle>
+            <DialogDescription className="text-slate-300">
+              {deleteTarget?.kind === "account"
+                ? `Delete account ${deleteTarget.label}? This permanently removes the account along with all associated transactions, holdings, institutional transfers, historical imports, and fee records.`
+                : `Delete ${deleteTarget?.label}? This permanently removes this display preference audit log entry from the database.`}
+            </DialogDescription>
+          </DialogHeader>
+          {deleteError && <p role="alert" className="text-sm text-red-300">{deleteError}</p>}
+          <DialogFooter className="gap-2">
+            <Button type="button" variant="ghost" disabled={deleting} className="text-slate-300" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+            <Button type="button" disabled={deleting} className="bg-red-600 text-white hover:bg-red-700" onClick={() => void confirmDelete()}>
+              {deleting && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}
+              Delete permanently
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }

@@ -33,6 +33,7 @@ import {
   reviewApproveClientRequestSchema,
   reviewRejectSchema,
 } from "./admin-ledger";
+import { registerAdminDeleteRoutes } from "./admin-delete";
 
 // Twilio Notification Setup (SMS/WhatsApp)
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
@@ -192,6 +193,7 @@ export async function registerRoutes(
   registerSecurityRoutes(app);
   await registerRecoveryRequests(app, requireAuth, requireAdmin);
   await registerClientSettings(app, requireAuth);
+  registerAdminDeleteRoutes(app, pool, requireAdmin);
   app.post(api.auth.register.path, (_req, res) => {
     res.status(410).json({
       message: "Direct registration is disabled. Submit an application and wait for approval.",

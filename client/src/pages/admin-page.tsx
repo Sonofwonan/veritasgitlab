@@ -10,7 +10,7 @@ import {
   Users, ArrowLeftRight, Clock, CheckCircle2,
   XCircle, ShieldCheck, LogOut, Wallet, Eye, EyeOff,
   RefreshCw, DollarSign, Activity, FileText, ChevronDown, ChevronUp, Building2,
-  Lock, Unlock, Snowflake, Copy, History, UserPlus, UserCheck, ShieldAlert, KeyRound
+  Lock, Unlock, Snowflake, Copy, History, UserPlus, UserCheck, ShieldAlert, KeyRound, Trash2
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog as ShadDialog, DialogContent as ShadDialogContent, DialogHeader as ShadDialogHeader, DialogTitle as ShadDialogTitle, DialogFooter as ShadDialogFooter } from "@/components/ui/dialog";
@@ -333,8 +333,8 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 // ─── Application Card ──────────────────────────────────────────────────────────
-function ApplicationCard({ app, onApprove, onReject, isPending }: {
-  app: any; onApprove: (id: number) => void; onReject: (id: number) => void; isPending: boolean;
+function ApplicationCard({ app, onApprove, onReject, onDelete, isPending }: {
+  app: any; onApprove: (id: number) => void; onReject: (id: number) => void; onDelete: (app: any) => void; isPending: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const statusColors: Record<string, string> = {
@@ -364,7 +364,7 @@ function ApplicationCard({ app, onApprove, onReject, isPending }: {
             <p className="mt-1 text-xs text-slate-400 italic">Note: {app.notes}</p>
           )}
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
           <Button size="sm" variant="ghost" onClick={() => setExpanded(v => !v)} className="text-slate-400 hover:text-white gap-1">
             {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
             Details
@@ -383,6 +383,11 @@ function ApplicationCard({ app, onApprove, onReject, isPending }: {
               </Button>
             </>
           )}
+          <Button size="sm" variant="outline" disabled={isPending} onClick={() => onDelete(app)}
+            className="border-red-500/40 text-red-400 hover:bg-red-500/10 gap-1" data-testid={`button-delete-app-${app.id}`}>
+            <Trash2 className="w-3.5 h-3.5" />
+            Delete
+          </Button>
         </div>
       </div>
 
@@ -650,6 +655,53 @@ function AdminDashboard({
   const [freezeReason, setFreezeReason] = useState("");
   const [currencyClient, setCurrencyClient] = useState<any | null>(null);
   const [debtNoticeClient, setDebtNoticeClient] = useState<any | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{
+    kind: "user" | "application" | "inst-transfer" | "payee" | "wire" | "staff";
+    id: number;
+    title: string;
+    description: string;
+    isCompletedTxn?: boolean;
+  } | null>(null);
+  const [reverseWireBalance, setReverseWireBalance] = useState(true);
+
+  const deleteRecordMutation = useMutation({
+    mutationFn: async (target: NonNullable<typeof deleteTarget>) => {
+      const path =
+        target.kind === "user"
+          ? `/api/admin/users/${target.id}`
+          : target.kind === "application"
+            ? `/api/admin/applications/${target.id}`
+            : target.kind === "inst-transfer"
+              ? `/api/admin/institutional-transfers/${target.id}`
+              : target.kind === "payee"
+                ? `/api/admin/payees/${target.id}`
+                : target.kind === "wire"
+                  ? `/api/admin/transactions/${target.id}?reverseBalance=${target.isCompletedTxn && reverseWireBalance ? "true" : "false"}`
+                  : `/api/admin/staff/${target.id}`;
+      const res = await adminFetch(path, adminKey, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.message || `Failed to delete record (HTTP ${res.status})`);
+      return data;
+    },
+    onSuccess: (data) => {
+      toast({ title: "Record Deleted", description: data?.message || "Database record removed." });
+      setDeleteTarget(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/applications"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/postings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/accounts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/institutional-transfers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/payees"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/wire-transfers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/staff"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/fees"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/audit-trail"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/auth/status"] });
+    },
+    onError: (err: any) => toast({ title: "Delete Failed", description: err.message, variant: "destructive" }),
+  });
 
   const freezeUserMutation = useMutation({
     mutationFn: ({ id, frozen, reason }: { id: number; frozen: boolean; reason?: string }) =>
@@ -761,15 +813,32 @@ function AdminDashboard({
                       </p>
                     </div>
                     {(!currentStaff || currentStaff.id !== s.id) && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={toggleStaffActiveMutation.isPending}
-                        onClick={() => toggleStaffActiveMutation.mutate({ id: s.id, active: !s.active })}
-                        className="h-7 text-xs border-slate-600 text-slate-300 hover:bg-slate-700"
-                      >
-                        {s.active ? "Deactivate" : "Reactivate"}
-                      </Button>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={toggleStaffActiveMutation.isPending}
+                          onClick={() => toggleStaffActiveMutation.mutate({ id: s.id, active: !s.active })}
+                          className="h-7 text-xs border-slate-600 text-slate-300 hover:bg-slate-700"
+                        >
+                          {s.active ? "Deactivate" : "Reactivate"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={deleteRecordMutation.isPending}
+                          onClick={() => setDeleteTarget({
+                            kind: "staff",
+                            id: s.id,
+                            title: `Delete staff administrator @${s.username}?`,
+                            description: `Permanently delete staff account ${s.displayName} (@${s.username}) and terminate their active admin sessions. Historical posting text logs are preserved.`,
+                          })}
+                          className="h-7 px-2 text-xs border-red-500/40 text-red-400 hover:bg-red-500/10"
+                          data-testid={`button-delete-staff-${s.id}`}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
                     )}
                   </div>
                 ))
@@ -992,7 +1061,13 @@ function AdminDashboard({
                         app={app}
                         onApprove={(id) => approveAppMutation.mutate({ id })}
                         onReject={(id) => rejectAppMutation.mutate({ id })}
-                        isPending={approveAppMutation.isPending || rejectAppMutation.isPending}
+                        onDelete={(targetApp) => setDeleteTarget({
+                          kind: "application",
+                          id: targetApp.id,
+                          title: `Delete application #${targetApp.id}?`,
+                          description: `Permanently remove the onboarding application for ${targetApp.fullName} (${targetApp.email}) from the database.`,
+                        })}
+                        isPending={approveAppMutation.isPending || rejectAppMutation.isPending || deleteRecordMutation.isPending}
                       />
                     ))}
                   </div>
@@ -1202,6 +1277,20 @@ function AdminDashboard({
                                 <Lock className="w-3 h-3 mr-1" /> Restrict
                               </Button>
                             )}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="border-red-500/40 text-red-400 hover:bg-red-500/10 hover:text-red-300 text-xs h-8"
+                              data-testid={`button-delete-user-${u.id}`}
+                              onClick={() => setDeleteTarget({
+                                kind: "user",
+                                id: u.id,
+                                title: `Delete client profile "${u.name}" (#${u.id})?`,
+                                description: `This permanently deletes ${u.name} (${u.email}) and ALL of their accounts, balances, transactions, holdings, institutional transfers, beneficiaries, fee schedules/assessments, historical balance imports, security/2FA records, and active sessions.`,
+                              })}
+                            >
+                              <Trash2 className="w-3 h-3 mr-1" /> Delete Profile
+                            </Button>
                           </div>
                         </div>
                       </div>
@@ -1395,25 +1484,42 @@ function AdminDashboard({
                                   <p className="text-xs text-slate-500 mt-1 italic">Note: {t.adminNotes}</p>
                                 )}
                               </div>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="border-primary/40 text-primary hover:bg-primary/10 gap-1.5 shrink-0"
-                                data-testid={`button-update-monitor-${t.id}`}
-                                onClick={() => {
-                                  setMonitorForm({
-                                    status: t.status,
-                                    estimatedCompletionDate: t.estimatedCompletionDate
-                                      ? new Date(t.estimatedCompletionDate).toISOString().split("T")[0]
-                                      : "",
-                                    adminNotes: t.adminNotes || "",
-                                  });
-                                  setMonitorDialog({ transfer: t });
-                                }}
-                              >
-                                <Activity className="w-3.5 h-3.5" />
-                                Update Monitor
-                              </Button>
+                              <div className="flex flex-wrap gap-2 shrink-0">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="border-primary/40 text-primary hover:bg-primary/10 gap-1.5 shrink-0"
+                                  data-testid={`button-update-monitor-${t.id}`}
+                                  onClick={() => {
+                                    setMonitorForm({
+                                      status: t.status,
+                                      estimatedCompletionDate: t.estimatedCompletionDate
+                                        ? new Date(t.estimatedCompletionDate).toISOString().split("T")[0]
+                                        : "",
+                                      adminNotes: t.adminNotes || "",
+                                    });
+                                    setMonitorDialog({ transfer: t });
+                                  }}
+                                >
+                                  <Activity className="w-3.5 h-3.5" />
+                                  Update Monitor
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="border-red-500/40 text-red-400 hover:bg-red-500/10 gap-1 shrink-0"
+                                  data-testid={`button-delete-inst-transfer-${t.id}`}
+                                  onClick={() => setDeleteTarget({
+                                    kind: "inst-transfer",
+                                    id: t.id,
+                                    title: `Delete institutional transfer IT-${t.id}?`,
+                                    description: `Permanently delete institutional transfer request IT-${t.id} (${t.institutionName} · ${t.userName}) from the database.`,
+                                  })}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  Delete
+                                </Button>
+                              </div>
                             </div>
                           </div>
                         );
@@ -1510,28 +1616,41 @@ function AdminDashboard({
                             <p className="text-slate-400 text-xs mt-0.5">{p.bankName || "—"} · IBAN ****{p.accountNumber?.slice(-4)} · SWIFT {p.routingNumber || "—"}</p>
                             <p className="text-slate-500 text-xs mt-0.5">Client: {p.userName} · {new Date(p.createdAt).toLocaleDateString("en-CA")}</p>
                           </div>
-                          {isPending && (
-                            <div className="flex gap-2 shrink-0">
-                              <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1 h-8 text-xs"
-                                disabled={approvePayeeMutation.isPending || rejectPayeeMutation.isPending}
-                                onClick={() => approvePayeeMutation.mutate(p.id)}
-                                data-testid={`button-approve-payee-${p.id}`}>
-                                <CheckCircle2 className="w-3 h-3" /> Approve
+                          <div className="flex items-center gap-2 shrink-0">
+                            {isPending && (
+                              <>
+                                <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1 h-8 text-xs"
+                                  disabled={approvePayeeMutation.isPending || rejectPayeeMutation.isPending}
+                                  onClick={() => approvePayeeMutation.mutate(p.id)}
+                                  data-testid={`button-approve-payee-${p.id}`}>
+                                  <CheckCircle2 className="w-3 h-3" /> Approve
+                                </Button>
+                                <Button size="sm" variant="outline" className="border-red-500/40 text-red-400 hover:bg-red-500/10 gap-1 h-8 text-xs"
+                                  disabled={approvePayeeMutation.isPending || rejectPayeeMutation.isPending}
+                                  onClick={() => rejectPayeeMutation.mutate(p.id)}
+                                  data-testid={`button-reject-payee-${p.id}`}>
+                                  <XCircle className="w-3 h-3" /> Reject
+                                </Button>
+                              </>
+                            )}
+                            {!isPending && (
+                              <Button size="sm" variant="ghost" className="text-slate-400 hover:text-white h-8 text-xs shrink-0"
+                                onClick={() => approvePayeeMutation.mutate(p.id)}>
+                                {isApproved ? "Re-approve" : "Approve"}
                               </Button>
-                              <Button size="sm" variant="outline" className="border-red-500/40 text-red-400 hover:bg-red-500/10 gap-1 h-8 text-xs"
-                                disabled={approvePayeeMutation.isPending || rejectPayeeMutation.isPending}
-                                onClick={() => rejectPayeeMutation.mutate(p.id)}
-                                data-testid={`button-reject-payee-${p.id}`}>
-                                <XCircle className="w-3 h-3" /> Reject
-                              </Button>
-                            </div>
-                          )}
-                          {!isPending && (
-                            <Button size="sm" variant="ghost" className="text-slate-400 hover:text-white h-8 text-xs shrink-0"
-                              onClick={() => approvePayeeMutation.mutate(p.id)}>
-                              {isApproved ? "Re-approve" : "Approve"}
+                            )}
+                            <Button size="sm" variant="outline"
+                              className="border-red-500/40 text-red-400 hover:bg-red-500/10 gap-1 h-8 text-xs"
+                              data-testid={`button-delete-payee-${p.id}`}
+                              onClick={() => setDeleteTarget({
+                                kind: "payee",
+                                id: p.id,
+                                title: `Delete beneficiary "${p.name}"?`,
+                                description: `Permanently delete saved beneficiary "${p.name}" (${p.bankName || "External"}) for ${p.userName}. Existing transactions keep their record with beneficiary link cleared.`,
+                              })}>
+                              <Trash2 className="w-3 h-3" /> Delete
                             </Button>
-                          )}
+                          </div>
                         </div>
                       );
                     })}
@@ -1586,12 +1705,29 @@ function AdminDashboard({
                             </div>
                             {t.adminNotes && <p className="text-slate-500 text-xs mt-1 italic">Note: {t.adminNotes}</p>}
                           </div>
-                          <Button size="sm" variant="outline"
-                            className="border-primary/40 text-primary hover:bg-primary/10 gap-1.5 shrink-0 h-8 text-xs"
-                            data-testid={`button-update-wire-${t.id}`}
-                            onClick={() => { setWireForm({ status: t.status, adminNotes: t.adminNotes || "" }); setWireDialog({ txn: t }); }}>
-                            <Activity className="w-3 h-3" /> Update
-                          </Button>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <Button size="sm" variant="outline"
+                              className="border-primary/40 text-primary hover:bg-primary/10 gap-1.5 shrink-0 h-8 text-xs"
+                              data-testid={`button-update-wire-${t.id}`}
+                              onClick={() => { setWireForm({ status: t.status, adminNotes: t.adminNotes || "" }); setWireDialog({ txn: t }); }}>
+                              <Activity className="w-3 h-3" /> Update
+                            </Button>
+                            <Button size="sm" variant="outline"
+                              className="border-red-500/40 text-red-400 hover:bg-red-500/10 gap-1 shrink-0 h-8 text-xs"
+                              data-testid={`button-delete-wire-${t.id}`}
+                              onClick={() => {
+                                setReverseWireBalance(t.status === "completed");
+                                setDeleteTarget({
+                                  kind: "wire",
+                                  id: t.id,
+                                  title: `Delete wire disbursement WT-${t.id}?`,
+                                  description: `Permanently delete wire transfer WT-${t.id} (${fmt(t.amount)} to ${t.payeeName || "recipient"}) and linked audit entries.`,
+                                  isCompletedTxn: t.status === "completed",
+                                });
+                              }}>
+                              <Trash2 className="w-3 h-3" /> Delete
+                            </Button>
+                          </div>
                         </div>
                       );
                     })}
@@ -1602,6 +1738,52 @@ function AdminDashboard({
           </TabsContent>
 
         </Tabs>
+
+        {/* Reusable Permanent Delete Confirmation Dialog */}
+        <ShadDialog open={!!deleteTarget} onOpenChange={(o) => { if (!o && !deleteRecordMutation.isPending) setDeleteTarget(null); }}>
+          <ShadDialogContent className="bg-slate-800 border-red-500/40 text-white max-w-md">
+            <ShadDialogHeader>
+              <ShadDialogTitle className="flex items-center gap-2 text-red-300">
+                <Trash2 className="w-4 h-4" />
+                {deleteTarget?.title}
+              </ShadDialogTitle>
+            </ShadDialogHeader>
+            <div className="space-y-4 py-2 text-xs">
+              <p className="text-slate-300 leading-relaxed">{deleteTarget?.description}</p>
+              {deleteTarget?.kind === "wire" && deleteTarget.isCompletedTxn && (
+                <label
+                  htmlFor="delete-wire-reverse-balance"
+                  className="flex items-start gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-slate-200 cursor-pointer"
+                >
+                  <input
+                    id="delete-wire-reverse-balance"
+                    name="delete-wire-reverse-balance"
+                    type="checkbox"
+                    checked={reverseWireBalance}
+                    onChange={(e) => setReverseWireBalance(e.target.checked)}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    Also reverse balance impact on affected account(s) if completed.
+                  </span>
+                </label>
+              )}
+            </div>
+            <ShadDialogFooter>
+              <Button variant="ghost" className="text-slate-400 hover:text-white" disabled={deleteRecordMutation.isPending} onClick={() => setDeleteTarget(null)}>
+                Cancel
+              </Button>
+              <Button
+                className="bg-red-600 hover:bg-red-700 text-white"
+                disabled={deleteRecordMutation.isPending}
+                data-testid="button-confirm-admin-delete"
+                onClick={() => deleteTarget && deleteRecordMutation.mutate(deleteTarget)}
+              >
+                {deleteRecordMutation.isPending ? "Deleting…" : "Delete Permanently"}
+              </Button>
+            </ShadDialogFooter>
+          </ShadDialogContent>
+        </ShadDialog>
       </div>
     </div>
   );

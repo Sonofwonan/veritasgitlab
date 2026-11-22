@@ -247,6 +247,20 @@ const memoryPostingRequests: MemoryPostingRequest[] = [];
 const memoryAuditTrail: MemoryAuditEntry[] = [];
 let memoryAuditSeq = 1;
 
+export function deleteMemoryAuditEntry(id: number): boolean {
+  const index = memoryAuditTrail.findIndex(entry => entry.id === id);
+  if (index === -1) return false;
+  memoryAuditTrail.splice(index, 1);
+  return true;
+}
+
+export function deleteMemoryPostingRequest(id: number): boolean {
+  const index = memoryPostingRequests.findIndex(req => req.id === id);
+  if (index === -1) return false;
+  memoryPostingRequests.splice(index, 1);
+  return true;
+}
+
 export async function recordTransactionAudit(
   dbClient: Pick<Pool, "query"> | PoolClient,
   entry: AuditInput,
