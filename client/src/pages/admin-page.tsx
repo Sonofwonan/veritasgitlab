@@ -55,11 +55,10 @@ function adminFetch(path: string, adminKey: string, options: RequestInit = {}) {
 
 // ─── Login Screen ─────────────────────────────────────────────────────────────
 function AdminLogin({ onLogin }: { onLogin: (session: AdminAuthSession) => void }) {
-  const [mode, setMode] = useState<"staff" | "enroll" | "legacy">("staff");
+  const [mode, setMode] = useState<"staff" | "legacy" | null>(null);
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
-  const [adminPassword, setAdminPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -74,11 +73,14 @@ function AdminLogin({ onLogin }: { onLogin: (session: AdminAuthSession) => void 
     staleTime: 0,
   });
 
-  const effectiveMode: "bootstrap" | "staff" | "enroll" | "legacy" = authStatus?.bootstrapRequired
+  const defaultMode: "staff" | "legacy" =
+    authStatus && authStatus.staffCount === 0 && authStatus.envPasswordConfigured
+      ? "legacy"
+      : "staff";
+
+  const effectiveMode: "bootstrap" | "staff" | "legacy" = authStatus?.bootstrapRequired
     ? "bootstrap"
-    : authStatus && authStatus.staffCount === 0 && authStatus.envPasswordConfigured && mode === "staff"
-      ? "enroll"
-      : mode;
+    : mode ?? defaultMode;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -94,21 +96,6 @@ function AdminLogin({ onLogin }: { onLogin: (session: AdminAuthSession) => void 
         const data = await res.json();
         if (!res.ok) {
           setError(data?.message || "Failed to create initial administrator.");
-          return;
-        }
-        onLogin({ token: data.token, staff: data.staff, legacyKeyMode: false });
-        return;
-      }
-
-      if (effectiveMode === "enroll") {
-        const res = await fetch("/api/admin/auth/enroll-with-master", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username, displayName, password, adminPassword }),
-        });
-        const data = await res.json();
-        if (!res.ok) {
-          setError(data?.message || "Failed to enroll staff administrator.");
           return;
         }
         onLogin({ token: data.token, staff: data.staff, legacyKeyMode: false });
@@ -173,37 +160,26 @@ function AdminLogin({ onLogin }: { onLogin: (session: AdminAuthSession) => void 
                       <UserPlus className="w-3.5 h-3.5" /> Initial Staff Administrator Setup
                     </p>
                     <p className="text-amber-200/80">
-                      No admin credential is configured yet. Create the first individual staff administrator account to lock down the portal. After signing in, enroll a second staff admin for dual-control posting approvals.
+                      No admin credential is configured yet. Create the first individual staff administrator account to lock down the portal. After signing in, add a second staff admin inside Staff Access for dual-control posting approvals.
                     </p>
                   </div>
                 ) : (
                   <div className="flex flex-wrap gap-1.5 p-1 rounded-lg bg-slate-900/60 border border-slate-700">
-                    {(authStatus?.staffCount ?? 0) > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => { setMode("staff"); setError(""); }}
+                      className={`flex-1 text-xs font-medium py-1.5 px-2.5 rounded-md transition-colors ${effectiveMode === "staff" ? "bg-primary text-white" : "text-slate-400 hover:text-white"}`}
+                    >
+                      Staff Sign In
+                    </button>
+                    {authStatus?.envPasswordConfigured && (
                       <button
                         type="button"
-                        onClick={() => { setMode("staff"); setError(""); }}
-                        className={`flex-1 text-xs font-medium py-1.5 px-2.5 rounded-md transition-colors ${effectiveMode === "staff" ? "bg-primary text-white" : "text-slate-400 hover:text-white"}`}
+                        onClick={() => { setMode("legacy"); setError(""); }}
+                        className={`flex-1 text-xs font-medium py-1.5 px-2.5 rounded-md transition-colors ${effectiveMode === "legacy" ? "bg-primary text-white" : "text-slate-400 hover:text-white"}`}
                       >
-                        Staff Sign In
+                        Admin Key
                       </button>
-                    )}
-                    {authStatus?.envPasswordConfigured && (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => { setMode("enroll"); setError(""); }}
-                          className={`flex-1 text-xs font-medium py-1.5 px-2.5 rounded-md transition-colors ${effectiveMode === "enroll" ? "bg-primary text-white" : "text-slate-400 hover:text-white"}`}
-                        >
-                          Enroll Staff
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => { setMode("legacy"); setError(""); }}
-                          className={`flex-1 text-xs font-medium py-1.5 px-2.5 rounded-md transition-colors ${effectiveMode === "legacy" ? "bg-primary text-white" : "text-slate-400 hover:text-white"}`}
-                        >
-                          Admin Key
-                        </button>
-                      </>
                     )}
                   </div>
                 )}
@@ -212,13 +188,13 @@ function AdminLogin({ onLogin }: { onLogin: (session: AdminAuthSession) => void 
                   <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs text-amber-200 flex items-start gap-2">
                     <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5 text-amber-300" />
                     <span>
-                      Shared Admin Key mode grants portal access to enroll staff, but cannot approve or post money movements until you sign in as an identified staff member.
+                      Sign in with the shared Admin Key to create and manage staff accounts inside Staff Access. Money-movement review and postings require signing in with a personal Staff account.
                     </span>
                   </div>
                 )}
 
                 <form onSubmit={handleSubmit} className="space-y-4">
-                  {(effectiveMode === "bootstrap" || effectiveMode === "enroll") && (
+                  {effectiveMode === "bootstrap" && (
                     <div className="space-y-1.5">
                       <label className="text-sm font-medium text-slate-300">Full Name (Audit Display Name)</label>
                       <Input
@@ -246,20 +222,6 @@ function AdminLogin({ onLogin }: { onLogin: (session: AdminAuthSession) => void 
                     </div>
                   )}
 
-                  {effectiveMode === "enroll" && (
-                    <div className="space-y-1.5">
-                      <label className="text-sm font-medium text-slate-300">Configured Admin Password</label>
-                      <Input
-                        type="password"
-                        value={adminPassword}
-                        onChange={e => setAdminPassword(e.target.value)}
-                        placeholder="Shared ADMIN_PASSWORD from server config"
-                        className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"
-                        data-testid="input-master-admin-password"
-                      />
-                    </div>
-                  )}
-
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium text-slate-300">
                       {effectiveMode === "legacy"
@@ -276,6 +238,7 @@ function AdminLogin({ onLogin }: { onLogin: (session: AdminAuthSession) => void 
                         placeholder={effectiveMode === "legacy" ? "Enter configured admin password" : "Enter password"}
                         className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500 pr-10"
                         data-testid="input-admin-password"
+                        autoFocus={effectiveMode === "legacy"}
                       />
                       <button
                         type="button"
@@ -298,14 +261,13 @@ function AdminLogin({ onLogin }: { onLogin: (session: AdminAuthSession) => void 
                       loading ||
                       !password ||
                       (effectiveMode !== "legacy" && !username.trim()) ||
-                      ((effectiveMode === "bootstrap" || effectiveMode === "enroll") && !displayName.trim()) ||
-                      (effectiveMode === "enroll" && !adminPassword)
+                      (effectiveMode === "bootstrap" && !displayName.trim())
                     }
                     data-testid="button-admin-login"
                   >
                     {loading ? (
                       <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                    ) : effectiveMode === "bootstrap" || effectiveMode === "enroll" ? (
+                    ) : effectiveMode === "bootstrap" ? (
                       <UserPlus className="w-4 h-4 mr-2" />
                     ) : effectiveMode === "legacy" ? (
                       <KeyRound className="w-4 h-4 mr-2" />
@@ -314,11 +276,9 @@ function AdminLogin({ onLogin }: { onLogin: (session: AdminAuthSession) => void 
                     )}
                     {effectiveMode === "bootstrap"
                       ? "Create Initial Staff Admin & Sign In"
-                      : effectiveMode === "enroll"
-                        ? "Enroll Staff Account & Sign In"
-                        : effectiveMode === "legacy"
-                          ? "Sign In with Admin Key"
-                          : "Sign In to Admin"}
+                      : effectiveMode === "legacy"
+                        ? "Sign In with Admin Key"
+                        : "Sign In to Admin"}
                   </Button>
                 </form>
               </>
@@ -791,7 +751,7 @@ function AdminDashboard({
                         {s.active ? "Active" : "Deactivated"} · Added {new Date(s.createdAt).toLocaleDateString()}
                       </p>
                     </div>
-                    {currentStaff && currentStaff.id !== s.id && (
+                    {(!currentStaff || currentStaff.id !== s.id) && (
                       <Button
                         size="sm"
                         variant="outline"
@@ -808,7 +768,7 @@ function AdminDashboard({
             </div>
 
             <div className="border-t border-slate-700 pt-4 space-y-3">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-300">Add Another Staff Administrator</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-300">Create Staff Administrator</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <Input
                   value={newStaffForm.displayName}

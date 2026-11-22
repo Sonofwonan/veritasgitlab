@@ -74,10 +74,6 @@ const staffCreateSchema = z.object({
   password: z.string().min(10, "Password must be at least 10 characters").max(200),
 }).strict();
 
-const enrollWithMasterSchema = staffCreateSchema.extend({
-  adminPassword: z.string().min(1, "Configured admin password is required"),
-}).strict();
-
 export async function initializeAdminTables(pool: Pool) {
   if (!hasDatabaseConfig) return;
   await pool.query(`
@@ -338,7 +334,7 @@ export async function setupAdminAuth(app: Express, pool: Pool) {
       res.setHeader("Cache-Control", "no-store");
       if (getConfiguredAdminPassword()) {
         return void res.status(403).json({
-          message: "Bootstrap is disabled when ADMIN_PASSWORD is configured. Enroll with your configured admin credential.",
+          message: "Bootstrap is disabled when ADMIN_PASSWORD is configured. Sign in with your Admin Key to create staff accounts.",
         });
       }
       const parsed = staffCreateSchema.parse(req.body);
@@ -382,41 +378,6 @@ export async function setupAdminAuth(app: Express, pool: Pool) {
         return void res.status(400).json({ message: error.issues[0]?.message || "Invalid input" });
       }
       return void res.status(500).json({ message: "Failed to initialize administrator account" });
-    }
-  });
-
-  // Enroll an individual staff account using the configured ADMIN_PASSWORD (for initial team setup when env secret is set)
-  app.post("/api/admin/auth/enroll-with-master", async (req, res) => {
-    try {
-      res.setHeader("Cache-Control", "no-store");
-      const configuredPassword = getConfiguredAdminPassword();
-      if (!configuredPassword) {
-        return void res.status(503).json({ message: "Configured ADMIN_PASSWORD is required for master enrollment." });
-      }
-      const parsed = enrollWithMasterSchema.parse(req.body);
-      if (!constantTimeMatch(parsed.adminPassword, configuredPassword)) {
-        return void res.status(401).json({ message: "Invalid configured admin credential." });
-      }
-      const existing = await findStaffByUsername(pool, parsed.username);
-      if (existing) {
-        return void res.status(409).json({ message: "That staff username already exists. Sign in with your staff password." });
-      }
-      const staff = await createStaffRecord(pool, {
-        username: parsed.username,
-        displayName: parsed.displayName,
-        password: parsed.password,
-        createdByStaffId: null,
-      });
-      const token = await issueSessionToken(pool, staff.id);
-      res.status(201).json({ ok: true, token, staff });
-    } catch (error: any) {
-      if (error instanceof z.ZodError) {
-        return void res.status(400).json({ message: error.issues[0]?.message || "Invalid input" });
-      }
-      if (error?.code === "23505" || error?.message === "STAFF_EXISTS") {
-        return void res.status(409).json({ message: "That staff username already exists." });
-      }
-      res.status(500).json({ message: "Failed to enroll staff administrator" });
     }
   });
 
@@ -532,8 +493,11 @@ export async function setupAdminAuth(app: Express, pool: Pool) {
     }
   });
 
-  app.patch("/api/admin/staff/:id", requireIdentifiedStaff, async (req, res) => {
+  app.patch("/api/admin/staff/:id", requireAdmin, async (req, res) => {
     try {
+      if (!req.adminStaff && !getConfiguredAdminPassword()) {
+        return void res.status(403).json({ message: "Administrator authorization required" });
+      }
       const id = z.coerce.number().int().positive().parse(req.params.id);
       const { active } = z.object({ active: z.boolean() }).strict().parse(req.body);
       if (req.adminStaff && id === req.adminStaff.id && !active) {

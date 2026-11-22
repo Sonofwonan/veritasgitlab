@@ -20,6 +20,56 @@ export function centsToMoney(cents: bigint): string {
   return `${negative ? "-" : ""}${whole.toString()}.${frac}`;
 }
 
+function parseDecimalScaled(raw: string): { scaled: bigint; scale: number } {
+  const trimmed = String(raw ?? "0").trim();
+  const match = /^(-?)(\d*)(?:\.(\d*))?(?:[eE]([+-]?\d+))?$/.exec(trimmed);
+  if (!match || (!match[2] && !match[3])) {
+    throw new AdminLedgerError(400, `Unsupported monetary value: ${trimmed}`);
+  }
+  const neg = Boolean(match[1]);
+  const intPart = match[2] || "0";
+  const fracPart = match[3] || "";
+  const exp = match[4] ? Number(match[4]) : 0;
+  const digits = BigInt(intPart + fracPart);
+  const signedDigits = neg ? -digits : digits;
+  const rawScale = fracPart.length - exp;
+  if (rawScale >= 0) {
+    return { scaled: signedDigits, scale: rawScale };
+  }
+  return { scaled: signedDigits * 10n ** BigInt(-rawScale), scale: 0 };
+}
+
+function compareDecimalStrings(a: string, b: string): number {
+  const pa = parseDecimalScaled(a);
+  const pb = parseDecimalScaled(b);
+  const scale = Math.max(pa.scale, pb.scale);
+  const va = pa.scaled * 10n ** BigInt(scale - pa.scale);
+  const vb = pb.scaled * 10n ** BigInt(scale - pb.scale);
+  return va < vb ? -1 : va > vb ? 1 : 0;
+}
+
+function addDecimalStrings(a: string, b: string): string {
+  const pa = parseDecimalScaled(a);
+  const pb = parseDecimalScaled(b);
+  const scale = Math.max(2, pa.scale, pb.scale);
+  const va = pa.scaled * 10n ** BigInt(scale - pa.scale);
+  const vb = pb.scaled * 10n ** BigInt(scale - pb.scale);
+  const sum = va + vb;
+  const neg = sum < 0n;
+  const abs = neg ? -sum : sum;
+  const factor = 10n ** BigInt(scale);
+  const whole = abs / factor;
+  const frac = (abs % factor).toString().padStart(scale, "0");
+  const trimmedFrac = frac.length > 2 ? frac.replace(/0+$/, "").padEnd(2, "0") : frac;
+  return `${neg ? "-" : ""}${whole.toString()}.${trimmedFrac}`;
+}
+
+function subtractDecimalStrings(a: string, b: string): string {
+  const normalizedB = String(b).trim();
+  const negatedB = normalizedB.startsWith("-") ? normalizedB.slice(1) : `-${normalizedB}`;
+  return addDecimalStrings(a, negatedB);
+}
+
 const positiveAmountSchema = z
   .string()
   .trim()
@@ -276,7 +326,7 @@ async function computePostingPreview(
   const accountIds = [input.fromAccountId, input.toAccountId].filter((id): id is number => id != null);
   const { rows: accountRows } = await client.query(
     `SELECT a.id, a.user_id AS "userId", a.account_number AS "accountNumber", a.account_type AS "accountType",
-       a.display_name AS "displayName", a.balance::text AS "balance", u.name AS "ownerName", u.email AS "ownerEmail"
+       a.display_name AS "displayName", COALESCE(a.balance, 0)::text AS "balance", u.name AS "ownerName", u.email AS "ownerEmail"
      FROM accounts a
      JOIN users u ON u.id = a.user_id
      WHERE a.id = ANY($1::int[])`,
@@ -288,6 +338,7 @@ async function computePostingPreview(
   if (!toAcc) throw new AdminLedgerError(404, "Destination account not found");
 
   const amountCents = moneyToCents(input.amount);
+  const amountStr = centsToMoney(amountCents);
   const affectedAccounts: any[] = [];
   const warnings: string[] = [];
   let canSubmit = true;
@@ -296,17 +347,17 @@ async function computePostingPreview(
     if (toAcc.userId !== input.clientUserId) {
       throw new AdminLedgerError(400, "Destination account does not belong to the selected client");
     }
-    const beforeCents = moneyToCents(toAcc.balance);
-    const afterCents = beforeCents + amountCents;
+    const beforeFormatted = addDecimalStrings(toAcc.balance, "0");
+    const afterFormatted = addDecimalStrings(toAcc.balance, amountStr);
     affectedAccounts.push({
       accountId: toAcc.id,
       accountLabel: accountLabel(toAcc),
       accountNumber: toAcc.accountNumber,
       ownerName: toAcc.ownerName,
       role: "destination",
-      balanceBefore: centsToMoney(beforeCents),
-      delta: `+${centsToMoney(amountCents)}`,
-      balanceAfter: centsToMoney(afterCents),
+      balanceBefore: beforeFormatted,
+      delta: `+${amountStr}`,
+      balanceAfter: afterFormatted,
     });
   } else {
     const fromAcc = byId.get(input.fromAccountId!);
@@ -314,12 +365,12 @@ async function computePostingPreview(
     if (fromAcc.userId !== input.clientUserId) {
       throw new AdminLedgerError(400, "Source account does not belong to the selected client");
     }
-    const fromBeforeCents = moneyToCents(fromAcc.balance);
-    const fromAfterCents = fromBeforeCents - amountCents;
-    if (fromAfterCents < 0n) {
+    const fromBeforeFormatted = addDecimalStrings(fromAcc.balance, "0");
+    const fromAfterFormatted = subtractDecimalStrings(fromAcc.balance, amountStr);
+    if (compareDecimalStrings(fromAcc.balance, amountStr) < 0) {
       canSubmit = false;
       warnings.push(
-        `Insufficient balance in ${accountLabel(fromAcc)} (${centsToMoney(fromBeforeCents)} available, ${centsToMoney(amountCents)} required).`,
+        `Insufficient balance in ${accountLabel(fromAcc)} (${fromBeforeFormatted} available, ${amountStr} required).`,
       );
     }
     affectedAccounts.push({
@@ -328,13 +379,13 @@ async function computePostingPreview(
       accountNumber: fromAcc.accountNumber,
       ownerName: fromAcc.ownerName,
       role: "source",
-      balanceBefore: centsToMoney(fromBeforeCents),
-      delta: `-${centsToMoney(amountCents)}`,
-      balanceAfter: centsToMoney(fromAfterCents),
+      balanceBefore: fromBeforeFormatted,
+      delta: `-${amountStr}`,
+      balanceAfter: fromAfterFormatted,
     });
 
-    const toBeforeCents = moneyToCents(toAcc.balance);
-    const toAfterCents = toBeforeCents + amountCents;
+    const toBeforeFormatted = addDecimalStrings(toAcc.balance, "0");
+    const toAfterFormatted = addDecimalStrings(toAcc.balance, amountStr);
     if (toAcc.userId !== input.clientUserId) {
       warnings.push(`Cross-client transfer: destination account belongs to ${toAcc.ownerName} (${toAcc.ownerEmail}).`);
     }
@@ -344,9 +395,9 @@ async function computePostingPreview(
       accountNumber: toAcc.accountNumber,
       ownerName: toAcc.ownerName,
       role: "destination",
-      balanceBefore: centsToMoney(toBeforeCents),
-      delta: `+${centsToMoney(amountCents)}`,
-      balanceAfter: centsToMoney(toAfterCents),
+      balanceBefore: toBeforeFormatted,
+      delta: `+${amountStr}`,
+      balanceAfter: toAfterFormatted,
     });
   }
 
@@ -871,12 +922,11 @@ export function registerAdminLedgerRoutes(
             [accountIds],
           );
           const byId = new Map<number, any>(lockedAccounts.map(a => [a.id, a]));
-          const amountCents = moneyToCents(request.amount);
 
           if (request.from_account_id != null) {
             const fromAcc = byId.get(request.from_account_id);
             if (!fromAcc) throw new AdminLedgerError(404, "Source account unavailable");
-            if (moneyToCents(fromAcc.balance) < amountCents) {
+            if (compareDecimalStrings(fromAcc.balance, request.amount) < 0) {
               throw new AdminLedgerError(400, "Insufficient funds in source account to execute transfer");
             }
             await client.query(
@@ -1002,8 +1052,8 @@ export function registerAdminLedgerRoutes(
         const revToId = targetTxn.from_account_id ?? null;
 
         if (revFromId != null) {
-          const { rows: [revFrom] } = await client.query(`SELECT balance::text FROM accounts WHERE id = $1`, [revFromId]);
-          if (!revFrom || moneyToCents(revFrom.balance) < moneyToCents(targetTxn.amount)) {
+          const { rows: [revFrom] } = await client.query(`SELECT COALESCE(balance, 0)::text AS balance FROM accounts WHERE id = $1`, [revFromId]);
+          if (!revFrom || compareDecimalStrings(revFrom.balance, targetTxn.amount) < 0) {
             throw new AdminLedgerError(400, "Insufficient balance to reverse the previously credited account");
           }
           await client.query(`UPDATE accounts SET balance = balance - $2::numeric WHERE id = $1`, [revFromId, targetTxn.amount]);
@@ -1047,8 +1097,8 @@ export function registerAdminLedgerRoutes(
         let replacementTxnId: number | null = null;
         if (replacement) {
           if (replacement.fromAccountId != null) {
-            const { rows: [repFrom] } = await client.query(`SELECT balance::text FROM accounts WHERE id = $1`, [replacement.fromAccountId]);
-            if (!repFrom || moneyToCents(repFrom.balance) < moneyToCents(replacement.amount)) {
+            const { rows: [repFrom] } = await client.query(`SELECT COALESCE(balance, 0)::text AS balance FROM accounts WHERE id = $1`, [replacement.fromAccountId]);
+            if (!repFrom || compareDecimalStrings(repFrom.balance, replacement.amount) < 0) {
               throw new AdminLedgerError(400, "Insufficient balance to post replacement transfer after reversal");
             }
             await client.query(`UPDATE accounts SET balance = balance - $2::numeric WHERE id = $1`, [replacement.fromAccountId, replacement.amount]);
