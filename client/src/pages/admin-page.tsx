@@ -9,7 +9,7 @@ import {
   XCircle, ShieldCheck, LogOut, Wallet, Eye, EyeOff,
   RefreshCw, DollarSign, Activity, FileText, ChevronDown, ChevronUp, Building2,
   Lock, Unlock, Snowflake, Copy, Check, History, UserPlus, UserCheck, ShieldAlert,
-  KeyRound, Trash2, LayoutDashboard, Search, ChevronRight, Menu, X, LifeBuoy
+  KeyRound, Trash2, LayoutDashboard, Search, ChevronRight, Menu, X, LifeBuoy, FolderPlus
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -29,6 +29,7 @@ import { AdminRecoveryRequests } from "@/components/admin/recovery-requests";
 import { AdminTransactions, type AdminStaff } from "@/components/admin/admin-transactions";
 import { ClientDetailView, type ResetLinkResult } from "@/components/admin/client-detail-view";
 import { destinationCountryName } from "@shared/institutional-destination";
+import { formatOnboardingLabel } from "@shared/onboarding-options";
 
 type AdminAuthSession = {
   token: string;
@@ -47,6 +48,7 @@ type AdminSection =
   | "overview"
   | "users"
   | "applications"
+  | "account-requests"
   | "transactions"
   | "inst-transfers"
   | "wire"
@@ -427,17 +429,18 @@ function ApplicationCard({
               ["Address", app.address],
               ["City", app.city],
               ["Country", app.country],
-              ["Employment", app.employmentStatus],
-              ["Annual Income", app.annualIncome],
-              ["Inv. Experience", app.investmentExperience],
-              ["Risk Tolerance", app.riskTolerance],
-              ["Investment Goal", app.investmentGoal],
-              ["Initial Deposit", app.initialDeposit],
-              ["Source of Funds", app.sourceOfFunds],
+              ["Employment", formatOnboardingLabel(app.employmentStatus)],
+              ["Annual Income", formatOnboardingLabel(app.annualIncome)],
+              ["Inv. Experience", formatOnboardingLabel(app.investmentExperience)],
+              ["Risk Tolerance", formatOnboardingLabel(app.riskTolerance)],
+              ["Investment Goal", formatOnboardingLabel(app.investmentGoal)],
+              ["Initial Deposit", formatOnboardingLabel(app.initialDeposit)],
+              ["Preferred Currency", app.preferredCurrency || "CAD"],
+              ["Source of Funds", formatOnboardingLabel(app.sourceOfFunds)],
             ].map(([label, value]) => value && (
-              <div key={label}>
+              <div key={String(label)}>
                 <span className="text-slate-500 uppercase tracking-wide text-[11px]">{label}</span>
-                <p className="text-slate-200 font-medium capitalize mt-0.5">{String(value).replace(/-/g, " ")}</p>
+                <p className="text-slate-200 font-medium mt-0.5">{String(value)}</p>
               </div>
             ))}
           </div>
@@ -627,6 +630,68 @@ function AdminDashboard({
     refetchInterval: 30000,
   });
 
+  const { data: accountRequests = [], isLoading: accountRequestsLoading, refetch: refetchAccountRequests } = useQuery<any[]>({
+    queryKey: ["/api/admin/account-requests"],
+    queryFn: () => adminGet("/api/admin/account-requests"),
+    refetchInterval: 30000,
+  });
+
+  const [approveAccountReqDialog, setApproveAccountReqDialog] = useState<{ request: any } | null>(null);
+  const [approveAccountReqForm, setApproveAccountReqForm] = useState({ displayName: "", adminNotes: "" });
+  const [rejectAccountReqDialog, setRejectAccountReqDialog] = useState<{ request: any } | null>(null);
+  const [rejectAccountReqNotes, setRejectAccountReqNotes] = useState("");
+
+  const approveAccountRequestMutation = useMutation({
+    mutationFn: async ({ id, displayName, adminNotes }: { id: number; displayName?: string; adminNotes?: string }) => {
+      const res = await adminFetch(`/api/admin/account-requests/${id}/approve`, adminKey, {
+        method: "POST",
+        body: JSON.stringify({ displayName, adminNotes }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.message || "Failed to approve account request");
+      return data;
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Account Opening Approved",
+        description: `${data.account?.accountType || "Account"} (${data.account?.accountNumber || "opened"}) is now active.`,
+      });
+      setApproveAccountReqDialog(null);
+      setApproveAccountReqForm({ displayName: "", adminNotes: "" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/account-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
+      if (data.account?.userId) {
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/users", data.account.userId, "details"] });
+      }
+    },
+    onError: (err: any) => {
+      toast({ title: "Approval Failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const rejectAccountRequestMutation = useMutation({
+    mutationFn: async ({ id, adminNotes }: { id: number; adminNotes?: string }) => {
+      const res = await adminFetch(`/api/admin/account-requests/${id}/reject`, adminKey, {
+        method: "POST",
+        body: JSON.stringify({ adminNotes }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.message || "Failed to reject account request");
+      return data;
+    },
+    onSuccess: () => {
+      toast({ title: "Account Request Declined" });
+      setRejectAccountReqDialog(null);
+      setRejectAccountReqNotes("");
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/account-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Rejection Failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   const [activationResult, setActivationResult] = useState<{
     clientRef: string;
     userName: string;
@@ -725,7 +790,7 @@ function AdminDashboard({
   const [currencyClient, setCurrencyClient] = useState<any | null>(null);
   const [debtNoticeClient, setDebtNoticeClient] = useState<any | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{
-    kind: "user" | "application" | "inst-transfer" | "payee" | "wire" | "staff";
+    kind: "user" | "application" | "account-request" | "inst-transfer" | "payee" | "wire" | "staff";
     id: number;
     title: string;
     description: string;
@@ -740,13 +805,15 @@ function AdminDashboard({
           ? `/api/admin/users/${target.id}`
           : target.kind === "application"
             ? `/api/admin/applications/${target.id}`
-            : target.kind === "inst-transfer"
-              ? `/api/admin/institutional-transfers/${target.id}`
-              : target.kind === "payee"
-                ? `/api/admin/payees/${target.id}`
-                : target.kind === "wire"
-                  ? `/api/admin/transactions/${target.id}?reverseBalance=${target.isCompletedTxn && reverseWireBalance ? "true" : "false"}`
-                  : `/api/admin/staff/${target.id}`;
+            : target.kind === "account-request"
+              ? `/api/admin/account-requests/${target.id}`
+              : target.kind === "inst-transfer"
+                ? `/api/admin/institutional-transfers/${target.id}`
+                : target.kind === "payee"
+                  ? `/api/admin/payees/${target.id}`
+                  : target.kind === "wire"
+                    ? `/api/admin/transactions/${target.id}?reverseBalance=${target.isCompletedTxn && reverseWireBalance ? "true" : "false"}`
+                    : `/api/admin/staff/${target.id}`;
       const res = await adminFetch(path, adminKey, { method: "DELETE" });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.message || `Failed to delete record (HTTP ${res.status})`);
@@ -761,6 +828,7 @@ function AdminDashboard({
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/applications"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/account-requests"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/transactions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/postings"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/accounts"] });
@@ -798,6 +866,10 @@ function AdminDashboard({
   const pendingAppsCount = useMemo(
     () => (Array.isArray(allApplications) ? allApplications.filter((a: any) => a.status === "pending").length : 0),
     [allApplications],
+  );
+  const pendingAccountReqCount = useMemo(
+    () => (Array.isArray(accountRequests) ? accountRequests.filter((r: any) => r.status === "pending").length : 0),
+    [accountRequests],
   );
   const pendingTxCount = (stats?.pendingCount ?? 0) + (stats?.pendingSecondAdminCount ?? 0);
   const pendingInstCount = useMemo(
@@ -856,6 +928,7 @@ function AdminDashboard({
         { id: "overview", label: "Overview", icon: LayoutDashboard },
         { id: "users", label: "Client Directory", icon: Users, badge: Array.isArray(allUsers) ? allUsers.length : 0 },
         { id: "applications", label: "Applications", icon: FileText, badge: pendingAppsCount > 0 ? pendingAppsCount : undefined },
+        { id: "account-requests", label: "Account Requests", icon: FolderPlus, badge: pendingAccountReqCount > 0 ? pendingAccountReqCount : undefined, testId: "tab-admin-account-requests" },
       ],
     },
     {
@@ -896,6 +969,7 @@ function AdminDashboard({
     overview: "Operations Overview",
     users: "Client Directory",
     applications: "Account Applications",
+    "account-requests": "Client Account Opening Requests",
     transactions: "Transactions & Dual-Control Postings",
     "inst-transfers": "Institutional Transfers",
     wire: "Wire Disbursements & Beneficiaries",
@@ -1072,6 +1146,7 @@ function AdminDashboard({
                 void refetchStats();
                 void refetchUsers();
                 void refetchApps();
+                void refetchAccountRequests();
               }}
               className="text-slate-400 hover:text-white hover:bg-slate-800 h-8 text-xs whitespace-nowrap shrink-0"
             >
@@ -1224,6 +1299,7 @@ function AdminDashboard({
                   <div className="divide-y divide-slate-800 text-xs">
                     {[
                       { label: "Onboarding Applications", count: pendingAppsCount, target: "applications" as AdminSection },
+                      { label: "Account Opening Requests", count: pendingAccountReqCount, target: "account-requests" as AdminSection },
                       { label: "Transactions & 2nd-Admin Postings", count: pendingTxCount, target: "transactions" as AdminSection },
                       { label: "Institutional Transfers", count: pendingInstCount, target: "inst-transfers" as AdminSection },
                       { label: "Beneficiary Approvals", count: pendingPayeeCount, target: "wire" as AdminSection },
@@ -1717,6 +1793,311 @@ function AdminDashboard({
             </Card>
           )}
 
+          {/* ── VIEW 3B: CLIENT ACCOUNT OPENING REQUESTS ── */}
+          {activeSection === "account-requests" && (
+            <div className="space-y-4">
+              {/* Approve Account Request Dialog */}
+              <ShadDialog open={!!approveAccountReqDialog} onOpenChange={(o) => { if (!o) setApproveAccountReqDialog(null); }}>
+                <ShadDialogContent className="bg-slate-900 border-emerald-500/35 text-white max-w-md">
+                  <ShadDialogHeader>
+                    <ShadDialogTitle className="flex items-center gap-2 text-white">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      Approve &amp; Open Account — AR-{approveAccountReqDialog?.request?.id}
+                    </ShadDialogTitle>
+                  </ShadDialogHeader>
+                  <div className="space-y-4 py-2 text-xs">
+                    <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-3 space-y-1">
+                      <p className="text-slate-200 font-semibold">
+                        {approveAccountReqDialog?.request?.accountType} · {approveAccountReqDialog?.request?.userName}
+                      </p>
+                      <p className="text-slate-400">
+                        {approveAccountReqDialog?.request?.ownershipStructure} · {approveAccountReqDialog?.request?.expectedInitialFunding} · {approveAccountReqDialog?.request?.jurisdiction}
+                      </p>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label htmlFor="approve-account-display-name" className="text-xs font-medium text-slate-300 block">
+                        Account Label / Display Name <span className="text-slate-500">(optional)</span>
+                      </label>
+                      <Input
+                        id="approve-account-display-name"
+                        value={approveAccountReqForm.displayName}
+                        onChange={(e) => setApproveAccountReqForm(f => ({ ...f, displayName: e.target.value }))}
+                        placeholder="Leave blank to use default account type name"
+                        className="bg-slate-950 border-slate-700 text-white placeholder:text-slate-500 text-sm"
+                        data-testid="input-approve-account-display-name"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label htmlFor="approve-account-notes" className="text-xs font-medium text-slate-300 block">
+                        Compliance / Advisor Note <span className="text-slate-500">(optional)</span>
+                      </label>
+                      <Textarea
+                        id="approve-account-notes"
+                        value={approveAccountReqForm.adminNotes}
+                        onChange={(e) => setApproveAccountReqForm(f => ({ ...f, adminNotes: e.target.value }))}
+                        placeholder="e.g. Mandate and funding source verified. Account opened."
+                        className="bg-slate-950 border-slate-700 text-white placeholder:text-slate-500 min-h-[80px] resize-none"
+                        data-testid="input-approve-account-notes"
+                      />
+                    </div>
+                  </div>
+                  <ShadDialogFooter>
+                    <Button variant="ghost" className="text-slate-400 hover:text-white" onClick={() => setApproveAccountReqDialog(null)}>
+                      Cancel
+                    </Button>
+                    <Button
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white whitespace-nowrap shrink-0"
+                      disabled={approveAccountRequestMutation.isPending}
+                      onClick={() => approveAccountRequestMutation.mutate({
+                        id: approveAccountReqDialog!.request.id,
+                        displayName: approveAccountReqForm.displayName.trim() || undefined,
+                        adminNotes: approveAccountReqForm.adminNotes.trim() || undefined,
+                      })}
+                      data-testid="button-confirm-approve-account-request"
+                    >
+                      {approveAccountRequestMutation.isPending ? "Opening Account…" : "Approve & Open Account"}
+                    </Button>
+                  </ShadDialogFooter>
+                </ShadDialogContent>
+              </ShadDialog>
+
+              {/* Reject Account Request Dialog */}
+              <ShadDialog open={!!rejectAccountReqDialog} onOpenChange={(o) => { if (!o) setRejectAccountReqDialog(null); }}>
+                <ShadDialogContent className="bg-slate-900 border-red-500/35 text-white max-w-md">
+                  <ShadDialogHeader>
+                    <ShadDialogTitle className="flex items-center gap-2 text-white">
+                      <XCircle className="w-4 h-4 text-red-400" />
+                      Decline Account Request — AR-{rejectAccountReqDialog?.request?.id}
+                    </ShadDialogTitle>
+                  </ShadDialogHeader>
+                  <div className="space-y-3 py-2 text-xs">
+                    <p className="text-slate-300">
+                      Decline {rejectAccountReqDialog?.request?.userName}'s request to open a{" "}
+                      <strong className="text-white">{rejectAccountReqDialog?.request?.accountType}</strong>.
+                    </p>
+                    <div className="space-y-1.5">
+                      <label htmlFor="reject-account-notes" className="text-xs font-medium text-slate-300 block">
+                        Decline Reason / Client Note
+                      </label>
+                      <Textarea
+                        id="reject-account-notes"
+                        value={rejectAccountReqNotes}
+                        onChange={(e) => setRejectAccountReqNotes(e.target.value)}
+                        placeholder="Provide the reason shown to the client on their request tracker."
+                        className="bg-slate-950 border-slate-700 text-white placeholder:text-slate-500 min-h-[90px] resize-none"
+                        data-testid="input-reject-account-notes"
+                      />
+                    </div>
+                  </div>
+                  <ShadDialogFooter>
+                    <Button variant="ghost" className="text-slate-400 hover:text-white" onClick={() => setRejectAccountReqDialog(null)}>
+                      Cancel
+                    </Button>
+                    <Button
+                      className="bg-red-600 hover:bg-red-700 text-white whitespace-nowrap shrink-0"
+                      disabled={rejectAccountRequestMutation.isPending}
+                      onClick={() => rejectAccountRequestMutation.mutate({
+                        id: rejectAccountReqDialog!.request.id,
+                        adminNotes: rejectAccountReqNotes.trim() || undefined,
+                      })}
+                      data-testid="button-confirm-reject-account-request"
+                    >
+                      {rejectAccountRequestMutation.isPending ? "Declining…" : "Confirm Decline"}
+                    </Button>
+                  </ShadDialogFooter>
+                </ShadDialogContent>
+              </ShadDialog>
+
+              <Card className="bg-slate-900/70 border-slate-800">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-white text-base flex items-center gap-2">
+                    <FolderPlus className="w-4 h-4 text-primary" />
+                    Client Account Opening Requests
+                    {pendingAccountReqCount > 0 && (
+                      <InlineTag tone="amber">{pendingAccountReqCount} pending</InlineTag>
+                    )}
+                    <Button size="sm" variant="ghost" onClick={() => refetchAccountRequests()} className="ml-auto text-slate-400 hover:text-white">
+                      <RefreshCw className="w-3.5 h-3.5" />
+                    </Button>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {accountRequestsLoading ? (
+                    <div className="flex items-center justify-center py-12 text-slate-400 text-sm">
+                      <RefreshCw className="w-5 h-5 animate-spin mr-2" /> Loading account requests…
+                    </div>
+                  ) : !Array.isArray(accountRequests) || accountRequests.length === 0 ? (
+                    <div className="text-center py-12">
+                      <FolderPlus className="w-10 h-10 text-slate-600 mx-auto mb-3" />
+                      <p className="text-slate-400 text-sm">No account opening requests submitted yet</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {accountRequests.map((reqItem: any) => (
+                        <div
+                          key={reqItem.id}
+                          className="rounded-lg border border-slate-800 bg-slate-950/60 p-4 space-y-3"
+                          data-testid={`admin-account-request-${reqItem.id}`}
+                        >
+                          <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-3">
+                            <div className="space-y-1.5 min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-mono text-xs text-slate-400">AR-{reqItem.id}</span>
+                                <span className="text-sm font-semibold text-white">
+                                  {reqItem.requestedDisplayName || reqItem.accountType}
+                                </span>
+                                {reqItem.requestedDisplayName && (
+                                  <span className="text-xs text-slate-400">({reqItem.accountType})</span>
+                                )}
+                                <InlineTag
+                                  tone={
+                                    reqItem.status === "approved"
+                                      ? "emerald"
+                                      : reqItem.status === "rejected"
+                                        ? "red"
+                                        : "amber"
+                                  }
+                                >
+                                  {reqItem.status}
+                                </InlineTag>
+                              </div>
+
+                              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-400">
+                                <span>
+                                  Client:{" "}
+                                  <button
+                                    type="button"
+                                    onClick={() => openClientProfile(reqItem.userId)}
+                                    className="text-slate-200 font-medium hover:text-emerald-300"
+                                  >
+                                    {reqItem.userName || `Client #${reqItem.userId}`}
+                                  </button>
+                                </span>
+                                {reqItem.userClientRef && (
+                                  <code className="font-mono text-emerald-300 bg-slate-900 border border-slate-700 px-1.5 py-0.5 rounded">
+                                    {reqItem.userClientRef}
+                                  </code>
+                                )}
+                                {reqItem.userEmail && <span>{reqItem.userEmail}</span>}
+                                <span>· Submitted {new Date(reqItem.createdAt).toLocaleDateString("en-CA")}</span>
+                              </div>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-2 shrink-0">
+                              {reqItem.status === "pending" && (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1 whitespace-nowrap shrink-0"
+                                    disabled={approveAccountRequestMutation.isPending || rejectAccountRequestMutation.isPending}
+                                    onClick={() => {
+                                      setApproveAccountReqForm({
+                                        displayName: reqItem.requestedDisplayName || "",
+                                        adminNotes: "",
+                                      });
+                                      setApproveAccountReqDialog({ request: reqItem });
+                                    }}
+                                    data-testid={`button-approve-account-request-${reqItem.id}`}
+                                  >
+                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                    Approve &amp; Open Account
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-8 text-xs border-red-500/40 text-red-400 hover:bg-red-500/10 gap-1 whitespace-nowrap shrink-0"
+                                    disabled={approveAccountRequestMutation.isPending || rejectAccountRequestMutation.isPending}
+                                    onClick={() => {
+                                      setRejectAccountReqNotes("");
+                                      setRejectAccountReqDialog({ request: reqItem });
+                                    }}
+                                    data-testid={`button-reject-account-request-${reqItem.id}`}
+                                  >
+                                    <XCircle className="w-3.5 h-3.5" />
+                                    Reject
+                                  </Button>
+                                </>
+                              )}
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 text-xs border-red-500/40 text-red-400 hover:bg-red-500/10 gap-1 whitespace-nowrap shrink-0"
+                                data-testid={`button-delete-account-request-${reqItem.id}`}
+                                onClick={() =>
+                                  setDeleteTarget({
+                                    kind: "account-request",
+                                    id: reqItem.id,
+                                    title: `Delete account request AR-${reqItem.id}?`,
+                                    description: `Permanently delete ${reqItem.userName || "client"}'s ${reqItem.accountType} opening request from the database.`,
+                                  })
+                                }
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                Delete
+                              </Button>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 pt-2 border-t border-slate-800/80 text-xs">
+                            <div>
+                              <span className="text-[11px] uppercase tracking-wider text-slate-500 block">Ownership</span>
+                              <span className="text-slate-200">{reqItem.ownershipStructure}</span>
+                            </div>
+                            <div>
+                              <span className="text-[11px] uppercase tracking-wider text-slate-500 block">Objective</span>
+                              <span className="text-slate-200">{reqItem.investmentObjective}</span>
+                            </div>
+                            <div>
+                              <span className="text-[11px] uppercase tracking-wider text-slate-500 block">Risk Profile</span>
+                              <span className="text-slate-200">{reqItem.riskTolerance}</span>
+                            </div>
+                            <div>
+                              <span className="text-[11px] uppercase tracking-wider text-slate-500 block">Funding Source</span>
+                              <span className="text-slate-200">{reqItem.fundingSource}</span>
+                            </div>
+                            <div>
+                              <span className="text-[11px] uppercase tracking-wider text-slate-500 block">Expected Funding</span>
+                              <span className="text-slate-200 font-mono">{reqItem.expectedInitialFunding}</span>
+                            </div>
+                            <div>
+                              <span className="text-[11px] uppercase tracking-wider text-slate-500 block">Jurisdiction</span>
+                              <span className="text-slate-200">{reqItem.jurisdiction}</span>
+                            </div>
+                          </div>
+
+                          {reqItem.additionalNotes && (
+                            <p className="text-xs text-slate-300 bg-slate-900/70 border border-slate-800 rounded px-3 py-2">
+                              <span className="text-slate-400 font-medium">Client notes:</span> {reqItem.additionalNotes}
+                            </p>
+                          )}
+
+                          {(reqItem.createdAccountNumber || reqItem.adminNotes || reqItem.reviewedByStaffName) && (
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs pt-1 text-slate-400">
+                              {reqItem.createdAccountNumber && (
+                                <span className="font-mono text-emerald-300">
+                                  Opened Account: {reqItem.createdAccountNumber}
+                                </span>
+                              )}
+                              {reqItem.adminNotes && (
+                                <span className="italic text-slate-300">Review note: {reqItem.adminNotes}</span>
+                              )}
+                              {reqItem.reviewedByStaffName && (
+                                <span>
+                                  Reviewed by {reqItem.reviewedByStaffName}
+                                  {reqItem.reviewedAt ? ` on ${new Date(reqItem.reviewedAt).toLocaleDateString("en-CA")}` : ""}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
           {/* ── VIEW 4: TRANSACTIONS & DUAL CONTROL ── */}
           {activeSection === "transactions" && (
             <AdminTransactions
@@ -2084,7 +2465,9 @@ function AdminDashboard({
                     <p className="text-center text-slate-400 py-8 text-sm">No wire disbursements submitted yet</p>
                   ) : (
                     <div className="space-y-2">
-                      {wireTransfers.map((t: any) => (
+                      {wireTransfers.map((t: any) => {
+                        const wireDisplayCurrency = clientBalanceCurrency({ displayCurrency: t.displayCurrency });
+                        return (
                         <div key={t.id} className="rounded-lg border border-slate-800 bg-slate-950/50 p-3.5 flex flex-col sm:flex-row sm:items-start gap-3"
                           data-testid={`wire-txn-admin-${t.id}`}>
                           <div className="flex-1 min-w-0">
@@ -2094,14 +2477,29 @@ function AdminDashboard({
                                 {t.status === "failed" ? "Rejected" : t.status}
                               </InlineTag>
                             </div>
-                            <p className="text-slate-200 text-sm mt-0.5">To: {t.payeeName}</p>
+                            <p className="text-slate-200 text-sm mt-0.5">
+                              To: {t.payeeName || "Beneficiary"}
+                              {t.payeeCountry ? ` · ${t.payeeCountry}` : ""}
+                              {t.payeeCurrency ? ` (${t.payeeCurrency})` : ""}
+                            </p>
+                            {t.description && (
+                              <p className="text-slate-400 text-xs mt-0.5">{t.description}</p>
+                            )}
                             <div className="flex flex-wrap gap-x-3 text-xs text-slate-400 mt-0.5">
                               <span>
                                 Client: <span className="text-slate-200">{t.userName}</span>
                                 {t.userClientRef && <span className="font-mono text-emerald-300 ml-1.5">[{t.userClientRef}]</span>}
                               </span>
                               <span>·</span>
-                              <span className="font-mono">CAD <strong className="text-white">${Number(t.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong></span>
+                              <span className="font-mono tabular-nums">
+                                <strong className="text-white">{formatBalance(t.amount, wireDisplayCurrency)}</strong>
+                              </span>
+                              {t.payeeRoutingNumber && (
+                                <>
+                                  <span>·</span>
+                                  <span className="font-mono text-slate-300">SWIFT/Routing: {t.payeeRoutingNumber}</span>
+                                </>
+                              )}
                               <span>·</span>
                               <span>{new Date(t.createdAt).toLocaleDateString("en-CA")}</span>
                             </div>
@@ -2131,7 +2529,8 @@ function AdminDashboard({
                             </Button>
                           </div>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </CardContent>

@@ -18,10 +18,11 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { clientBalanceCurrency, formatBalance } from "@shared/balance-currency";
+import { BALANCE_CURRENCY_INFO, clientBalanceCurrency, formatBalance } from "@shared/balance-currency";
 import { accountLabel } from "@shared/account-display";
 import { formatCAD } from "@shared/fees";
 import { destinationCountryName } from "@shared/institutional-destination";
+import { formatOnboardingLabel } from "@shared/onboarding-options";
 
 export type ResetLinkResult = {
   userId: number;
@@ -54,6 +55,7 @@ type ClientDetailsResponse = {
   };
   application: any | null;
   accounts: any[];
+  accountRequests?: any[];
   investments: any[];
   transactions: any[];
   payees: any[];
@@ -245,7 +247,7 @@ export function ClientDetailView({
     );
   }
 
-  const { user, contactDetails, security, application, accounts, investments, transactions, payees, institutionalTransfers, displayCurrencyAudit, fees } =
+  const { user, contactDetails, security, application, accounts, accountRequests = [], investments, transactions, payees, institutionalTransfers, displayCurrencyAudit, fees } =
     detailsQuery.data;
   const currency = clientBalanceCurrency(user);
   const resAddress = formatAddress(contactDetails?.residentialAddress);
@@ -254,7 +256,7 @@ export function ClientDetailView({
 
   const subTabs: Array<{ id: typeof section; label: string; count?: number }> = [
     { id: "overview", label: "Overview & KYC" },
-    { id: "accounts", label: "Accounts & Holdings", count: accounts.length + investments.length },
+    { id: "accounts", label: "Accounts & Holdings", count: accounts.length + investments.length + accountRequests.length },
     { id: "activity", label: "Transactions & Transfers", count: transactions.length + payees.length + institutionalTransfers.length },
     { id: "security", label: "Security & Reset History", count: security.setupTokens.length + security.recoveryRequests.length },
     { id: "fees", label: "Fees & Contracts", count: fees.enrollments.length + fees.contracts.length },
@@ -583,7 +585,9 @@ export function ClientDetailView({
               </div>
               <div>
                 <dt className="text-[11px] uppercase tracking-wider text-slate-400">Display Currency</dt>
-                <dd className="mt-0.5 text-slate-200">{currency === "GBP" ? "£ GBP Display (Presentation only)" : "CAD Display"}</dd>
+                <dd className="mt-0.5 text-slate-200">
+                  {BALANCE_CURRENCY_INFO[currency].name} ({currency} · Presentation only)
+                </dd>
               </div>
               <div>
                 <dt className="text-[11px] uppercase tracking-wider text-slate-400">Registered On</dt>
@@ -626,18 +630,19 @@ export function ClientDetailView({
                   ["Nationality", application.nationality],
                   ["Address", application.address],
                   ["City / Country", [application.city, application.country].filter(Boolean).join(", ")],
-                  ["Employment", application.employmentStatus],
-                  ["Annual Income", application.annualIncome],
-                  ["Experience", application.investmentExperience],
-                  ["Risk Tolerance", application.riskTolerance],
-                  ["Investment Goal", application.investmentGoal],
-                  ["Initial Deposit", application.initialDeposit],
-                  ["Source of Funds", application.sourceOfFunds],
+                  ["Employment", formatOnboardingLabel(application.employmentStatus)],
+                  ["Annual Income", formatOnboardingLabel(application.annualIncome)],
+                  ["Experience", formatOnboardingLabel(application.investmentExperience)],
+                  ["Risk Tolerance", formatOnboardingLabel(application.riskTolerance)],
+                  ["Investment Goal", formatOnboardingLabel(application.investmentGoal)],
+                  ["Initial Deposit", formatOnboardingLabel(application.initialDeposit)],
+                  ["Preferred Currency", application.preferredCurrency || "CAD"],
+                  ["Source of Funds", formatOnboardingLabel(application.sourceOfFunds)],
                   ["Submitted", application.createdAt ? new Date(application.createdAt).toLocaleDateString("en-CA") : null],
                 ].map(([label, val]) => (
                   <div key={String(label)}>
                     <dt className="text-[11px] uppercase tracking-wider text-slate-400">{label}</dt>
-                    <dd className="mt-0.5 text-slate-200 capitalize">{val ? String(val).replace(/-/g, " ") : "—"}</dd>
+                    <dd className="mt-0.5 text-slate-200">{val ? String(val) : "—"}</dd>
                   </div>
                 ))}
               </dl>
@@ -755,6 +760,47 @@ export function ClientDetailView({
                     })}
                   </tbody>
                 </table>
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-lg border border-slate-700/80 bg-slate-900/60 overflow-hidden">
+            <div className="px-5 py-3.5 border-b border-slate-800">
+              <h3 className="text-sm font-semibold text-white">Account Opening Requests ({accountRequests.length})</h3>
+            </div>
+            {accountRequests.length === 0 ? (
+              <p className="p-5 text-xs text-slate-400">No additional account opening requests submitted by this client.</p>
+            ) : (
+              <div className="divide-y divide-slate-800 text-xs">
+                {accountRequests.map((reqItem: any) => (
+                  <div key={reqItem.id} className="p-4 space-y-1.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono text-slate-400">AR-{reqItem.id}</span>
+                        <span className="font-semibold text-white">
+                          {reqItem.requestedDisplayName || reqItem.accountType}
+                        </span>
+                        {reqItem.requestedDisplayName && (
+                          <span className="text-slate-400">({reqItem.accountType})</span>
+                        )}
+                      </div>
+                      <StatusTag
+                        tone={reqItem.status === "approved" ? "emerald" : reqItem.status === "rejected" ? "red" : "amber"}
+                      >
+                        {reqItem.status}
+                      </StatusTag>
+                    </div>
+                    <p className="text-slate-300">
+                      {reqItem.ownershipStructure} · {reqItem.investmentObjective} · {reqItem.riskTolerance} risk · {reqItem.expectedInitialFunding} ({reqItem.fundingSource}) · {reqItem.jurisdiction}
+                    </p>
+                    {reqItem.createdAccountNumber && (
+                      <p className="font-mono text-emerald-300">Opened Account: {reqItem.createdAccountNumber}</p>
+                    )}
+                    {reqItem.adminNotes && (
+                      <p className="italic text-slate-400">Review note: {reqItem.adminNotes}</p>
+                    )}
+                  </div>
+                ))}
               </div>
             )}
           </div>

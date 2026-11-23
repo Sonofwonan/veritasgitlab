@@ -240,6 +240,34 @@ export default function DashboardPage() {
         <DebtAccountSummary summary={feeSummary.data} accounts={accounts} variant="dashboard" loading={feeSummary.isLoading}
           error={feeSummary.isError} retry={() => void feeSummary.refetch()} currency={currency} />
 
+        {/* ── Initial Deposit Callout for Newly Approved Unfunded Accounts ── */}
+        {!accountsLoading && !balanceUnavailable && cashTotal === 0 && investTotal === 0 && !activeTransfer && (
+          <div
+            className="rounded-sm border border-primary/25 bg-primary/5 px-5 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+            data-testid="banner-initiate-initial-deposit"
+          >
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-sm bg-primary/15 flex items-center justify-center shrink-0 mt-0.5">
+                <Landmark className="w-4 h-4 text-primary" />
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-foreground">Fund your portfolio</p>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Initiate your initial deposit by submitting your incoming wire, SWIFT, or bank transfer instructions for administrative verification and posting.
+                </p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => setLocation("/transfers?tab=deposit")}
+              className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-sm text-xs whitespace-nowrap shrink-0"
+              data-testid="button-dashboard-initiate-deposit"
+            >
+              Initiate Initial Deposit
+            </Button>
+          </div>
+        )}
+
         {/* ── Portfolio in Transit Banner ─────────────────────────────────── */}
         {activeTransfer && (() => {
           const stage = activeTransfer.status === "pending" ? 0

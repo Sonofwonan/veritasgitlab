@@ -2,11 +2,12 @@ import type { Express, RequestHandler } from "express";
 import type { Pool } from "pg";
 import { z } from "zod";
 import { accounts } from "@shared/schema";
+import { BALANCE_CURRENCIES } from "@shared/balance-currency";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { FeeService } from "./fees/service";
 
-const currency = z.enum(["CAD", "GBP"]);
+const currency = z.enum(BALANCE_CURRENCIES);
 const positiveId = z.coerce.number().int().positive();
 export const displayCurrencyChange = z.object({
   displayCurrency: currency,
@@ -19,19 +20,41 @@ export class DisplayCurrencyError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
 
+const CURRENCY_SQL_LIST = BALANCE_CURRENCIES.map(c => `'${c}'`).join(",");
+
 export async function initializeDisplayCurrencyAudit(pool: Pool) {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS client_display_currency_audit (
       id SERIAL PRIMARY KEY,
       user_id INTEGER NOT NULL REFERENCES users(id),
       actor TEXT NOT NULL,
-      previous_currency TEXT NOT NULL CHECK (previous_currency IN ('CAD','GBP')),
-      display_currency TEXT NOT NULL CHECK (display_currency IN ('CAD','GBP')),
+      previous_currency TEXT NOT NULL,
+      display_currency TEXT NOT NULL,
       reason TEXT NOT NULL,
       confirmed BOOLEAN NOT NULL CHECK (confirmed),
       presentation_only BOOLEAN NOT NULL DEFAULT TRUE CHECK (presentation_only),
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
+    DO $$
+    DECLARE
+      c RECORD;
+    BEGIN
+      FOR c IN
+        SELECT conname, conrelid::regclass AS tbl
+        FROM pg_constraint
+        WHERE contype = 'c'
+          AND conrelid IN ('client_display_currency_audit'::regclass, 'users'::regclass)
+          AND (
+            pg_get_constraintdef(oid) ILIKE '%previous_currency%'
+            OR pg_get_constraintdef(oid) ILIKE '%display_currency%'
+          )
+      LOOP
+        EXECUTE format('ALTER TABLE %s DROP CONSTRAINT IF EXISTS %I', c.tbl, c.conname);
+      END LOOP;
+    END $$;
+    ALTER TABLE client_display_currency_audit
+      ADD CONSTRAINT client_display_currency_audit_prev_check CHECK (previous_currency IN (${CURRENCY_SQL_LIST})),
+      ADD CONSTRAINT client_display_currency_audit_curr_check CHECK (display_currency IN (${CURRENCY_SQL_LIST}));
     CREATE OR REPLACE FUNCTION reject_display_currency_audit_edit() RETURNS trigger LANGUAGE plpgsql AS $$
     BEGIN
       IF TG_OP = 'DELETE' AND current_setting('veritas.admin_delete', true) = 'on' THEN

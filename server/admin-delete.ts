@@ -199,6 +199,7 @@ export function registerAdminDeleteRoutes(
         await client.query(`DELETE FROM client_security_events WHERE user_id = $1`, [userId]);
         await client.query(`DELETE FROM client_security WHERE user_id = $1`, [userId]);
         await client.query(`DELETE FROM client_contact_details WHERE user_id = $1`, [userId]);
+        await client.query(`DELETE FROM account_opening_requests WHERE user_id = $1`, [userId]);
         await client.query(`DELETE FROM accounts WHERE user_id = $1`, [userId]);
         await client.query(`DELETE FROM users WHERE id = $1`, [userId]);
 
@@ -302,6 +303,7 @@ export function registerAdminDeleteRoutes(
         await client.query(`DELETE FROM transactions WHERE id = ANY($1::int[])`, [txnIds]);
         await client.query(`DELETE FROM investments WHERE account_id = $1`, [accountId]);
         await client.query(`DELETE FROM institutional_transfers WHERE account_id = $1`, [accountId]);
+        await client.query(`UPDATE account_opening_requests SET created_account_id = NULL WHERE created_account_id = $1`, [accountId]);
         await client.query(`DELETE FROM accounts WHERE id = $1`, [accountId]);
 
         return { ok: true, id: accountId };
@@ -619,5 +621,19 @@ export function registerAdminDeleteRoutes(
         return { ok: true, id };
       });
     }, "Failed to delete fee audit entry"),
+  );
+
+  // 17. Delete an account opening request
+  app.delete(
+    "/api/admin/account-requests/:id",
+    admin,
+    handle(async (req) => {
+      const id = positiveId.parse(req.params.id);
+      return withAdminDeleteTx(pool, async (client) => {
+        const result = await client.query(`DELETE FROM account_opening_requests WHERE id = $1 RETURNING id`, [id]);
+        if (result.rowCount !== 1) throw new AdminDeleteError(404, "Account opening request not found");
+        return { ok: true, id };
+      });
+    }, "Failed to delete account opening request"),
   );
 }

@@ -2,6 +2,7 @@ import { pgTable, text, serial, integer, boolean, timestamp, numeric, pgEnum } f
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { relations, sql } from "drizzle-orm";
+import { BALANCE_CURRENCIES } from "./balance-currency";
 
 export const accountTypeEnum = pgEnum('account_type', [
   // Investment/Retirement accounts only
@@ -18,7 +19,7 @@ export const transactionStatusEnum = pgEnum('transaction_status', ['completed', 
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   clientRef: text("client_ref").unique(),
-  displayCurrency: text("display_currency", { enum: ["CAD", "GBP"] }).notNull().default("CAD"),
+  displayCurrency: text("display_currency", { enum: BALANCE_CURRENCIES }).notNull().default("CAD"),
   debtClearanceRequired: boolean("debt_clearance_required").notNull().default(false),
   debtPaymentAccountId: integer("debt_payment_account_id"),
   debtPaymentConfirmedAt: timestamp("debt_payment_confirmed_at"),
@@ -44,8 +45,8 @@ export const clientDisplayCurrencyAudit = pgTable("client_display_currency_audit
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull().references(() => users.id),
   actor: text("actor").notNull(),
-  previousCurrency: text("previous_currency", { enum: ["CAD", "GBP"] }).notNull(),
-  displayCurrency: text("display_currency", { enum: ["CAD", "GBP"] }).notNull(),
+  previousCurrency: text("previous_currency", { enum: BALANCE_CURRENCIES }).notNull(),
+  displayCurrency: text("display_currency", { enum: BALANCE_CURRENCIES }).notNull(),
   reason: text("reason").notNull(),
   confirmed: boolean("confirmed").notNull(),
   presentationOnly: boolean("presentation_only").notNull().default(true),
@@ -149,6 +150,8 @@ export const payees = pgTable("payees", {
   accountNumber: text("account_number"),
   routingNumber: text("routing_number"),
   bankName: text("bank_name"),
+  country: text("country"),
+  currency: text("currency"),
   type: text("type").notNull().default("individual"), // individual, business
   status: text("status").notNull().default("pending_approval"), // pending_approval | approved | rejected
   adminNotes: text("admin_notes"),
@@ -256,6 +259,7 @@ export const applications = pgTable("applications", {
   investmentGoal: text("investment_goal"),
   initialDeposit: text("initial_deposit"),
   sourceOfFunds: text("source_of_funds"),
+  preferredCurrency: text("preferred_currency").default("CAD"),
   password: text("password"),
   status: text("status").notNull().default("pending"),
   notes: text("notes"),
@@ -275,6 +279,39 @@ export const accountSetupTokens = pgTable("account_setup_tokens", {
   consumedAt: timestamp("consumed_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+export const accountOpeningRequests = pgTable("account_opening_requests", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  accountType: text("account_type").notNull(),
+  requestedDisplayName: text("requested_display_name"),
+  ownershipStructure: text("ownership_structure").notNull(),
+  investmentObjective: text("investment_objective").notNull(),
+  riskTolerance: text("risk_tolerance").notNull(),
+  fundingSource: text("funding_source").notNull(),
+  expectedInitialFunding: text("expected_initial_funding").notNull(),
+  jurisdiction: text("jurisdiction").notNull(),
+  additionalNotes: text("additional_notes"),
+  status: text("status").notNull().default("pending"), // pending | approved | rejected
+  adminNotes: text("admin_notes"),
+  createdAccountId: integer("created_account_id"),
+  reviewedByStaffName: text("reviewed_by_staff_name"),
+  reviewedAt: timestamp("reviewed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type AccountOpeningRequest = typeof accountOpeningRequests.$inferSelect;
+export const insertAccountOpeningRequestSchema = createInsertSchema(accountOpeningRequests).omit({
+  id: true,
+  userId: true,
+  status: true,
+  adminNotes: true,
+  createdAccountId: true,
+  reviewedByStaffName: true,
+  reviewedAt: true,
+  createdAt: true,
+});
+export type InsertAccountOpeningRequest = z.infer<typeof insertAccountOpeningRequestSchema>;
 
 export const insertUserSchema = createInsertSchema(users, {
   name: z.string().min(2, "Name must be at least 2 characters"),

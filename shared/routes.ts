@@ -87,6 +87,10 @@ export const api = {
         fromAccountId: z.number(),
         toAccountId: z.number(),
         amount: z.string(),
+        fundingMethod: z.string().trim().max(120).optional(),
+        senderBankName: z.string().trim().max(160).optional(),
+        senderReference: z.string().trim().max(120).optional(),
+        notes: z.string().trim().max(500).optional(),
       }),
       responses: {
         201: z.custom<typeof transactions.$inferSelect>(),

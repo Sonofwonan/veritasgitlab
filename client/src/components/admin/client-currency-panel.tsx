@@ -2,7 +2,14 @@ import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Eye, EyeOff, RefreshCw, ShieldAlert, Trash2 } from "lucide-react";
 import { accountLabel } from "@shared/account-display";
-import { clientBalanceCurrency, formatBalance, type BalanceCurrency } from "@shared/balance-currency";
+import {
+  BALANCE_CURRENCIES,
+  BALANCE_CURRENCY_INFO,
+  balanceCurrencyLabel,
+  clientBalanceCurrency,
+  formatBalance,
+  type BalanceCurrency,
+} from "@shared/balance-currency";
 import type { ClientFeeSummary } from "@shared/fees";
 import { AccountFeeBalance, FeeLiability } from "@/components/fees/fee-liability";
 import { Button } from "@/components/ui/button";
@@ -52,6 +59,7 @@ export function ClientCurrencyPanel({
 }) {
   const queryClient = useQueryClient();
   const [currency, setCurrency] = useState<BalanceCurrency>("CAD");
+  const [currencySearch, setCurrencySearch] = useState("");
   const [reason, setReason] = useState("");
   const [confirmed, setConfirmed] = useState(false);
   const [hidden, setHidden] = useState(false);
@@ -84,6 +92,7 @@ export function ClientCurrencyPanel({
   useEffect(() => {
     if (open && user) {
       setCurrency(clientBalanceCurrency(user));
+      setCurrencySearch("");
       setReason("");
       setConfirmed(false);
       setHidden(false);
@@ -213,9 +222,11 @@ export function ClientCurrencyPanel({
           <div className="flex flex-wrap items-center justify-between gap-3 border border-slate-700 bg-slate-800/50 p-3">
             <div>
               <p className="text-xs uppercase tracking-wide text-slate-400">Current preference</p>
-              <p className="mt-1 font-medium">{displayCurrency === "GBP" ? "£ Pound display" : "CAD display"}</p>
+              <p className="mt-1 font-medium">
+                {BALANCE_CURRENCY_INFO[displayCurrency].name} ({displayCurrency} · {BALANCE_CURRENCY_INFO[displayCurrency].symbol})
+              </p>
             </div>
-            <Button type="button" variant="outline" size="sm" className="border-slate-600 text-slate-200" onClick={() => setHidden(value => !value)}>
+            <Button type="button" variant="outline" size="sm" className="border-slate-600 text-slate-200 whitespace-nowrap shrink-0" onClick={() => setHidden(value => !value)}>
               {hidden ? <Eye className="mr-2 h-4 w-4" /> : <EyeOff className="mr-2 h-4 w-4" />}
               {hidden ? "Show balances" : "Hide balances"}
             </Button>
@@ -228,22 +239,47 @@ export function ClientCurrencyPanel({
             </p>
           </div>
 
-          <fieldset className="space-y-2">
-            <legend className="mb-2 text-sm font-medium text-slate-200">Set client display preference</legend>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {([{ value: "CAD", label: "CAD", detail: "Canadian dollar display" }, { value: "GBP", label: "£ Pound", detail: "Pound display" }] as const).map(option => (
-                <button
-                  key={option.value}
-                  type="button"
-                  aria-pressed={currency === option.value}
-                  disabled={saving}
-                  onClick={() => { setCurrency(option.value); setConfirmed(false); }}
-                  className={`border p-3 text-left transition-colors ${currency === option.value ? "border-primary bg-primary/10" : "border-slate-700 bg-slate-800/40 hover:border-slate-500"}`}
-                >
-                  <span className="block font-semibold">{option.label}</span>
-                  <span className="mt-1 block text-xs text-slate-400">{option.detail}</span>
-                </button>
-              ))}
+          <fieldset className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <legend className="text-sm font-medium text-slate-200">
+                Set client display preference ({BALANCE_CURRENCIES.length} currencies)
+              </legend>
+              <input
+                type="search"
+                value={currencySearch}
+                onChange={event => setCurrencySearch(event.target.value)}
+                placeholder="Filter by code or currency name…"
+                aria-label="Filter currencies"
+                className="w-full sm:w-56 border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-xs text-white placeholder:text-slate-500 focus:border-primary focus:outline-none"
+                data-testid="input-currency-filter"
+              />
+            </div>
+            <div className="grid max-h-56 gap-2 overflow-y-auto pr-1 sm:grid-cols-3">
+              {BALANCE_CURRENCIES.filter(code => {
+                const q = currencySearch.trim().toLowerCase();
+                if (!q) return true;
+                const info = BALANCE_CURRENCY_INFO[code];
+                return code.toLowerCase().includes(q) || info.name.toLowerCase().includes(q) || info.symbol.toLowerCase().includes(q);
+              }).map(code => {
+                const info = BALANCE_CURRENCY_INFO[code];
+                return (
+                  <button
+                    key={code}
+                    type="button"
+                    aria-pressed={currency === code}
+                    disabled={saving}
+                    onClick={() => { setCurrency(code); setConfirmed(false); }}
+                    data-testid={`button-currency-${code}`}
+                    className={`border p-2.5 text-left transition-colors ${currency === code ? "border-primary bg-primary/15 text-white" : "border-slate-700 bg-slate-800/40 text-slate-200 hover:border-slate-500"}`}
+                  >
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="font-mono text-sm font-semibold">{code}</span>
+                      <span className="font-mono text-xs text-slate-300">{info.symbol}</span>
+                    </div>
+                    <span className="mt-1 block truncate text-xs text-slate-400">{info.name}</span>
+                  </button>
+                );
+              })}
             </div>
           </fieldset>
 
@@ -352,7 +388,7 @@ export function ClientCurrencyPanel({
               : <ul className="mt-2 space-y-2 text-sm text-slate-300">{auditQuery.data.map(entry =>
                 <li key={entry.id} className="border border-slate-700 p-2">
                   <div className="flex items-start justify-between gap-2">
-                    <span>{entry.previousCurrency === "GBP" ? "£" : "CAD"} → {entry.displayCurrency === "GBP" ? "£" : "CAD"} · {entry.actor} · {new Date(entry.createdAt).toLocaleString()}</span>
+                    <span>{balanceCurrencyLabel(entry.previousCurrency)} → {balanceCurrencyLabel(entry.displayCurrency)} · {entry.actor} · {new Date(entry.createdAt).toLocaleString()}</span>
                     <Button
                       type="button"
                       size="sm"

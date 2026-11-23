@@ -10,6 +10,19 @@ import { useMutation } from "@tanstack/react-query";
 import { BrandedLoader } from "@/components/branded-loader";
 import { SessionLoadError } from "@/components/session-load-error";
 
+import {
+  ANNUAL_INCOME_OPTIONS,
+  EMPLOYMENT_STATUS_OPTIONS,
+  INITIAL_DEPOSIT_OPTIONS,
+  INVESTMENT_EXPERIENCE_OPTIONS,
+  INVESTMENT_GOAL_OPTIONS,
+  ONBOARDING_COUNTRIES,
+  ONBOARDING_NATIONALITIES,
+  RISK_TOLERANCE_OPTIONS,
+  SOURCE_OF_FUNDS_OPTIONS,
+} from "@shared/onboarding-options";
+import { BALANCE_CURRENCIES, BALANCE_CURRENCY_INFO } from "@shared/balance-currency";
+
 const loginSchema = z.object({
   userId: z.string().min(1, "Client Reference is required"),
   password: z.string().min(1, "Password required"),
@@ -20,7 +33,7 @@ const appSchema = z.object({
   email: z.string().email("Valid email required"),
   phone: z.string().min(7, "Phone required"),
   dateOfBirth: z.string().min(1, "Date of birth required"),
-  nationality: z.string().optional(),
+  nationality: z.string().min(1, "Nationality required"),
   address: z.string().optional(),
   city: z.string().optional(),
   country: z.string().min(1, "Country required"),
@@ -30,26 +43,40 @@ const appSchema = z.object({
   riskTolerance: z.string().min(1, "Required"),
   investmentGoal: z.string().min(1, "Required"),
   initialDeposit: z.string().min(1, "Required"),
+  customInitialDeposit: z.string().optional(),
+  preferredCurrency: z.string().min(1, "Preferred currency required"),
   sourceOfFunds: z.string().min(1, "Required"),
+}).superRefine((val, ctx) => {
+  if (val.initialDeposit === "custom") {
+    const num = Number(String(val.customInitialDeposit || "").replace(/[^0-9.]/g, ""));
+    if (!Number.isFinite(num) || num <= 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["customInitialDeposit"],
+        message: "Enter your intended initial deposit amount",
+      });
+    }
+  }
 });
 
 type AppData = z.infer<typeof appSchema>;
 
-function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
+function Field({ id, label, error, children }: { id?: string; label: string; error?: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">
-      <label className="label-caps text-muted-foreground">{label}</label>
+      <label htmlFor={id} className="label-caps text-muted-foreground">{label}</label>
       {children}
       {error && <p className="auth-error-copy text-xs mt-1">{error}</p>}
     </div>
   );
 }
 
-function TextInput({ reg, type = "text", placeholder, autoComplete }: {
-  reg: any; type?: string; placeholder?: string; autoComplete?: string;
+function TextInput({ id, reg, type = "text", placeholder, autoComplete }: {
+  id?: string; reg: any; type?: string; placeholder?: string; autoComplete?: string;
 }) {
   return (
     <input
+      id={id}
       {...reg}
       type={type}
       placeholder={placeholder}
@@ -59,9 +86,10 @@ function TextInput({ reg, type = "text", placeholder, autoComplete }: {
   );
 }
 
-function SelectInput({ reg, options }: { reg: any; options: { v: string; l: string }[] }) {
+function SelectInput({ id, reg, options }: { id?: string; reg: any; options: ReadonlyArray<{ v: string; l: string }> }) {
   return (
     <select
+      id={id}
       {...reg}
       className="vw-input text-foreground appearance-none cursor-pointer"
     >
@@ -72,6 +100,11 @@ function SelectInput({ reg, options }: { reg: any; options: { v: string; l: stri
 }
 
 const STEPS = ["About you", "Where you live", "How you invest"];
+
+const CURRENCY_OPTIONS = BALANCE_CURRENCIES.map(code => ({
+  v: code,
+  l: `${code} — ${BALANCE_CURRENCY_INFO[code].name} (${BALANCE_CURRENCY_INFO[code].symbol})`,
+}));
 
 function ApplicationForm({ onBack }: { onBack: () => void }) {
   const [step, setStep] = useState(0);
@@ -84,24 +117,34 @@ function ApplicationForm({ onBack }: { onBack: () => void }) {
       fullName: "", email: "", phone: "", dateOfBirth: "", nationality: "",
       address: "", city: "", country: "", employmentStatus: "", annualIncome: "",
       investmentExperience: "", riskTolerance: "", investmentGoal: "",
-      initialDeposit: "", sourceOfFunds: "",
+      initialDeposit: "", customInitialDeposit: "", preferredCurrency: "CAD", sourceOfFunds: "",
     },
     mode: "onTouched",
   });
-  const { register, handleSubmit, trigger, formState: { errors } } = form;
+  const { register, handleSubmit, trigger, watch, formState: { errors } } = form;
+  const selectedInitialDeposit = watch("initialDeposit");
 
   const stepFields: (keyof AppData)[][] = [
     ["fullName", "email", "phone", "dateOfBirth", "nationality"],
     ["address", "city", "country", "employmentStatus", "annualIncome"],
-    ["investmentExperience", "riskTolerance", "investmentGoal", "initialDeposit", "sourceOfFunds"],
+    ["investmentExperience", "riskTolerance", "investmentGoal", "initialDeposit", "customInitialDeposit", "preferredCurrency", "sourceOfFunds"],
   ];
 
   const mutation = useMutation({
     mutationFn: async (data: AppData) => {
+      const cleanedCustom = String(data.customInitialDeposit || "").replace(/[^0-9.]/g, "");
+      const formattedDeposit = data.initialDeposit === "custom"
+        ? `$${Number(cleanedCustom).toLocaleString("en-US", { maximumFractionDigits: 2 })} (Custom)`
+        : data.initialDeposit;
+
+      const { customInitialDeposit: _unused, ...rest } = data;
       const res = await fetch("/api/applications", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify({
+          ...rest,
+          initialDeposit: formattedDeposit,
+        }),
       });
       if (!res.ok) throw new Error((await res.json()).message || "Submission failed");
       return res.json();
@@ -124,7 +167,7 @@ function ApplicationForm({ onBack }: { onBack: () => void }) {
         <div className="space-y-2 max-w-sm mx-auto">
           <h3 className="font-serif text-2xl">We have your application</h3>
           <p className="text-muted-foreground text-sm leading-relaxed">
-             Someone from our team will review it and reach out within one to two business days. If approved, you will receive your Client ID and a one-time account setup link through a verified contact channel.
+            Someone from our team will review it and reach out within one to two business days. If approved, you will receive your Client ID and a one-time account setup link through a verified contact channel.
           </p>
         </div>
         <button onClick={onBack} className="label-caps text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5 mx-auto">
@@ -159,21 +202,25 @@ function ApplicationForm({ onBack }: { onBack: () => void }) {
         {step === 0 && (
           <div className="space-y-6">
             <p className="font-serif text-xl">Tell us a bit about yourself</p>
-            <Field label="Full legal name" error={errors.fullName?.message}>
-              <TextInput reg={register("fullName")} placeholder="As it appears on your ID" autoComplete="name" />
+            <Field id="app-fullName" label="Full legal name" error={errors.fullName?.message}>
+              <TextInput id="app-fullName" reg={register("fullName")} placeholder="As it appears on your ID" autoComplete="name" />
             </Field>
-            <div className="grid grid-cols-2 gap-x-8 gap-y-6">
-              <Field label="Email address" error={errors.email?.message}>
-                <TextInput reg={register("email")} type="email" placeholder="you@example.com" autoComplete="email" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-6">
+              <Field id="app-email" label="Email address" error={errors.email?.message}>
+                <TextInput id="app-email" reg={register("email")} type="email" placeholder="you@example.com" autoComplete="email" />
               </Field>
-              <Field label="Phone number" error={errors.phone?.message}>
-                <TextInput reg={register("phone")} placeholder="+1 555 000 0000" />
+              <Field id="app-phone" label="Phone number" error={errors.phone?.message}>
+                <TextInput id="app-phone" reg={register("phone")} placeholder="+1 555 000 0000" />
               </Field>
-              <Field label="Date of birth" error={errors.dateOfBirth?.message}>
-                <TextInput reg={register("dateOfBirth")} type="date" />
+              <Field id="app-dob" label="Date of birth" error={errors.dateOfBirth?.message}>
+                <TextInput id="app-dob" reg={register("dateOfBirth")} type="date" />
               </Field>
-              <Field label="Nationality" error={errors.nationality?.message}>
-                <TextInput reg={register("nationality")} placeholder="e.g. American" />
+              <Field id="app-nationality" label="Nationality" error={errors.nationality?.message}>
+                <SelectInput
+                  id="app-nationality"
+                  reg={register("nationality")}
+                  options={ONBOARDING_NATIONALITIES}
+                />
               </Field>
             </div>
           </div>
@@ -183,34 +230,26 @@ function ApplicationForm({ onBack }: { onBack: () => void }) {
         {step === 1 && (
           <div className="space-y-6">
             <p className="font-serif text-xl">Where are you based?</p>
-            <Field label="Street address" error={errors.address?.message}>
-              <TextInput reg={register("address")} placeholder="123 Main Street" autoComplete="street-address" />
+            <Field id="app-address" label="Street address" error={errors.address?.message}>
+              <TextInput id="app-address" reg={register("address")} placeholder="123 Main Street" autoComplete="street-address" />
             </Field>
-            <div className="grid grid-cols-2 gap-x-8 gap-y-6">
-              <Field label="City" error={errors.city?.message}>
-                <TextInput reg={register("city")} placeholder="New York" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-6">
+              <Field id="app-city" label="City" error={errors.city?.message}>
+                <TextInput id="app-city" reg={register("city")} placeholder="Toronto" />
               </Field>
-              <Field label="Country" error={errors.country?.message}>
-                <TextInput reg={register("country")} placeholder="United States" />
+              <Field id="app-country" label="Country of residence" error={errors.country?.message}>
+                <SelectInput
+                  id="app-country"
+                  reg={register("country")}
+                  options={ONBOARDING_COUNTRIES}
+                />
               </Field>
             </div>
-            <Field label="Employment status" error={errors.employmentStatus?.message}>
-              <SelectInput reg={register("employmentStatus")} options={[
-                { v: "employed", l: "Employed full time" },
-                { v: "self-employed", l: "Self employed or business owner" },
-                { v: "retired", l: "Retired" },
-                { v: "unemployed", l: "Not currently employed" },
-                { v: "student", l: "Student" },
-              ]} />
+            <Field id="app-employment" label="Employment status" error={errors.employmentStatus?.message}>
+              <SelectInput id="app-employment" reg={register("employmentStatus")} options={EMPLOYMENT_STATUS_OPTIONS} />
             </Field>
-            <Field label="Annual income (USD)" error={errors.annualIncome?.message}>
-              <SelectInput reg={register("annualIncome")} options={[
-                { v: "under-50m", l: "Under $50,000,000" },
-                { v: "50m-100m", l: "$50,000,000 to $100,000,000" },
-                { v: "100m-500m", l: "$100,000,000 to $500,000,000" },
-                { v: "500m-1b", l: "$500,000,000 to $1,000,000,000" },
-                { v: "over-1b", l: "Over $1,000,000,000" },
-              ]} />
+            <Field id="app-annualIncome" label="Annual income" error={errors.annualIncome?.message}>
+              <SelectInput id="app-annualIncome" reg={register("annualIncome")} options={ANNUAL_INCOME_OPTIONS} />
             </Field>
           </div>
         )}
@@ -219,59 +258,46 @@ function ApplicationForm({ onBack }: { onBack: () => void }) {
         {step === 2 && (
           <div className="space-y-6">
             <p className="font-serif text-xl">How do you like to invest?</p>
-            <div className="grid grid-cols-2 gap-x-8 gap-y-6">
-              <Field label="Investment experience" error={errors.investmentExperience?.message}>
-                <SelectInput reg={register("investmentExperience")} options={[
-                  { v: "none", l: "Brand new to investing" },
-                  { v: "beginner", l: "Basic familiarity" },
-                  { v: "intermediate", l: "Some portfolio experience" },
-                  { v: "experienced", l: "Actively managed portfolios" },
-                  { v: "professional", l: "Financial industry background" },
-                ]} />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-6">
+              <Field id="app-experience" label="Investment experience" error={errors.investmentExperience?.message}>
+                <SelectInput id="app-experience" reg={register("investmentExperience")} options={INVESTMENT_EXPERIENCE_OPTIONS} />
               </Field>
-              <Field label="Risk tolerance" error={errors.riskTolerance?.message}>
-                <SelectInput reg={register("riskTolerance")} options={[
-                  { v: "conservative", l: "Conservative, preserve capital" },
-                  { v: "moderate", l: "Moderate, balanced approach" },
-                  { v: "aggressive", l: "Aggressive, maximum growth" },
-                ]} />
+              <Field id="app-risk" label="Risk tolerance" error={errors.riskTolerance?.message}>
+                <SelectInput id="app-risk" reg={register("riskTolerance")} options={RISK_TOLERANCE_OPTIONS} />
               </Field>
-              <Field label="Primary investment goal" error={errors.investmentGoal?.message}>
-                <SelectInput reg={register("investmentGoal")} options={[
-                  { v: "retirement", l: "Retirement planning" },
-                  { v: "growth", l: "Long term capital growth" },
-                  { v: "income", l: "Income and dividends" },
-                  { v: "preservation", l: "Capital preservation" },
-                  { v: "education", l: "Education funding" },
-                  { v: "estate", l: "Estate and legacy planning" },
-                ]} />
+              <Field id="app-goal" label="Primary investment goal" error={errors.investmentGoal?.message}>
+                <SelectInput id="app-goal" reg={register("investmentGoal")} options={INVESTMENT_GOAL_OPTIONS} />
               </Field>
-              <Field label="Anticipated initial deposit" error={errors.initialDeposit?.message}>
-                <SelectInput reg={register("initialDeposit")} options={[
-                  { v: "500m-1b", l: "$500M to $1B" },
-                  { v: "1b-5b", l: "$1B to $5B" },
-                  { v: "5b-10b", l: "$5B to $10B" },
-                  { v: "over-10b", l: "Over $10B" },
-                ]} />
+              <Field id="app-deposit" label="Anticipated initial deposit" error={errors.initialDeposit?.message}>
+                <SelectInput id="app-deposit" reg={register("initialDeposit")} options={INITIAL_DEPOSIT_OPTIONS} />
               </Field>
             </div>
-            <Field label="Primary source of funds" error={errors.sourceOfFunds?.message}>
-              <SelectInput reg={register("sourceOfFunds")} options={[
-                { v: "salary", l: "Employment or salary" },
-                { v: "business", l: "Business income or exit" },
-                { v: "inheritance", l: "Inheritance or gift" },
-                { v: "savings", l: "Personal savings" },
-                { v: "investment", l: "Investment returns" },
-                { v: "other", l: "Other" },
-              ]} />
-            </Field>
+
+            {selectedInitialDeposit === "custom" && (
+              <Field id="app-customDeposit" label="Custom initial deposit amount" error={errors.customInitialDeposit?.message}>
+                <TextInput
+                  id="app-customDeposit"
+                  reg={register("customInitialDeposit")}
+                  placeholder="e.g. 15000"
+                />
+              </Field>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-6">
+              <Field id="app-currency" label="Preferred display currency" error={errors.preferredCurrency?.message}>
+                <SelectInput id="app-currency" reg={register("preferredCurrency")} options={CURRENCY_OPTIONS} />
+              </Field>
+              <Field id="app-sourceOfFunds" label="Primary source of funds" error={errors.sourceOfFunds?.message}>
+                <SelectInput id="app-sourceOfFunds" reg={register("sourceOfFunds")} options={SOURCE_OF_FUNDS_OPTIONS} />
+              </Field>
+            </div>
           </div>
         )}
 
         {step === 2 && (
           <div className="pt-2 text-xs text-muted-foreground border-t border-border space-y-1.5 leading-relaxed">
             <p>By submitting this form you confirm that everything you have provided is accurate and that you are the beneficial owner of the assets to be invested. You agree to our Terms of Service and Privacy Policy.</p>
-            <p>You will create your password only after your application is approved, using a one-time setup link.</p>
+            <p>You will create your password and finalize your display currency preference once your application is approved, using a one-time setup link.</p>
           </div>
         )}
 
@@ -566,7 +592,7 @@ export default function AuthPage() {
                 <p className="label-caps text-muted-foreground mb-3">Account application</p>
                 <h2 className="font-serif text-display-md">Apply for<br />membership.</h2>
                 <p className="text-muted-foreground text-sm mt-3 leading-relaxed">
-                  Fill in all four sections and your dedicated advisor will be in touch within one business day.
+                  Fill in all three sections and your dedicated advisor will be in touch within one business day.
                 </p>
               </div>
               <ApplicationForm onBack={() => setView("login")} />

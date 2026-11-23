@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, type InsertAccount } from "@shared/routes";
+import { api } from "@shared/routes";
 import { apiRequest } from "@/lib/queryClient";
 
 // ACCOUNTS
@@ -15,15 +15,61 @@ export function useAccounts() {
   });
 }
 
-export function useCreateAccount() {
+export type AccountOpeningRequestItem = {
+  id: number;
+  userId: number;
+  accountType: string;
+  requestedDisplayName: string | null;
+  ownershipStructure: string;
+  investmentObjective: string;
+  riskTolerance: string;
+  fundingSource: string;
+  expectedInitialFunding: string;
+  jurisdiction: string;
+  additionalNotes: string | null;
+  status: "pending" | "approved" | "rejected";
+  adminNotes: string | null;
+  createdAccountId: number | null;
+  createdAccountNumber: string | null;
+  createdAccountLabel: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+};
+
+export type CreateAccountOpeningRequestInput = {
+  accountType: string;
+  requestedDisplayName?: string;
+  ownershipStructure: string;
+  investmentObjective: string;
+  riskTolerance: string;
+  fundingSource: string;
+  expectedInitialFunding: string;
+  jurisdiction: string;
+  additionalNotes?: string;
+  clientDeclarationAccepted: true;
+};
+
+export function useAccountRequests() {
+  return useQuery<AccountOpeningRequestItem[]>({
+    queryKey: ["/api/account-requests"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/account-requests");
+      return res.json();
+    },
+    refetchInterval: 30000,
+    refetchIntervalInBackground: true,
+  });
+}
+
+export function useCreateAccountRequest() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: InsertAccount) => {
-      const res = await apiRequest(api.accounts.create.method, api.accounts.create.path, data);
-      return api.accounts.create.responses[201].parse(await res.json());
+    mutationFn: async (data: CreateAccountOpeningRequestInput) => {
+      const res = await apiRequest("POST", "/api/account-requests", data);
+      return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [api.accounts.list.path] });
+      queryClient.invalidateQueries({ queryKey: ["/api/account-requests"] });
     },
   });
 }
@@ -105,12 +151,21 @@ export function useAccountTransactions(accountId: number) {
 export function useTransfer() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: { fromAccountId: number; toAccountId: number; amount: string }) => {
+    mutationFn: async (data: {
+      fromAccountId: number;
+      toAccountId: number;
+      amount: string;
+      fundingMethod?: string;
+      senderBankName?: string;
+      senderReference?: string;
+      notes?: string;
+    }) => {
       const res = await apiRequest(api.transactions.transfer.method, api.transactions.transfer.path, data);
       return api.transactions.transfer.responses[201].parse(await res.json());
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.accounts.list.path] });
+      queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
     },
   });
 }
@@ -160,6 +215,7 @@ export function usePayment() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.accounts.list.path] });
+      queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
     },
   });
 }

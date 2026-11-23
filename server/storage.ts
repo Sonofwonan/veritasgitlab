@@ -106,6 +106,7 @@ export class DatabaseStorage implements IStorage {
     const [account] = await db.insert(accounts).values({
       userId: insertAccount.userId,
       accountType: insertAccount.accountType,
+      displayName: insertAccount.displayName ?? null,
       balance: String(insertAccount.balance || "0"),
       isDemo: insertAccount.isDemo ?? true,
     }).returning();

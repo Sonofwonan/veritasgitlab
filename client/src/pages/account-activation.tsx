@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { CheckCircle2, Loader2, ShieldCheck } from "lucide-react";
+import { BALANCE_CURRENCIES, BALANCE_CURRENCY_INFO, isBalanceCurrency, type BalanceCurrency } from "@shared/balance-currency";
 
 const passwordChecks = [
   { label: "At least 12 characters", test: (value: string) => value.length >= 12 },
@@ -16,6 +17,8 @@ export default function AccountActivationPage() {
   const [tokenReady, setTokenReady] = useState(false);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [displayCurrency, setDisplayCurrency] = useState<BalanceCurrency>("CAD");
+  const [savedCurrency, setSavedCurrency] = useState<BalanceCurrency | null>(null);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [clientRef, setClientRef] = useState("");
@@ -28,7 +31,40 @@ export default function AccountActivationPage() {
     window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
     setToken(fragmentToken);
     setMode(fragmentMode);
-    setTokenReady(true);
+
+    if (!fragmentToken) {
+      setTokenReady(true);
+      return;
+    }
+
+    let cancelled = false;
+    fetch("/api/account-activation/inspect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: fragmentToken }),
+    })
+      .then(async (res) => {
+        const data = await res.json().catch(() => null);
+        if (cancelled) return;
+        if (res.ok && data?.ok) {
+          if (data.purpose === "admin_reset") {
+            setMode("reset");
+          } else {
+            setMode("activation");
+          }
+          if (isBalanceCurrency(data.displayCurrency)) {
+            setDisplayCurrency(data.displayCurrency);
+          }
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setTokenReady(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const passwordIsValid = passwordChecks.every(check => check.test(password));
@@ -56,12 +92,17 @@ export default function AccountActivationPage() {
       const response = await fetch("/api/account-activation/complete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, password }),
+        body: JSON.stringify({
+          token,
+          password,
+          ...(isReset ? {} : { displayCurrency }),
+        }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data?.message || "Unable to complete password setup.");
       setClientRef(data.clientRef);
       setCompletedPurpose(data.purpose === "admin_reset" ? "reset" : mode);
+      setSavedCurrency(isBalanceCurrency(data.displayCurrency) ? data.displayCurrency : displayCurrency);
       setToken("");
       setPassword("");
       setConfirmPassword("");
@@ -95,6 +136,14 @@ export default function AccountActivationPage() {
               <p className="text-sm leading-relaxed text-muted-foreground">
                 Your Client ID is <strong className="font-mono text-accent">{clientRef}</strong>. Keep it available; you will use it with your password to sign in.
               </p>
+              {completedPurpose === "activation" && savedCurrency && (
+                <p className="text-sm leading-relaxed text-muted-foreground">
+                  Display currency set to{" "}
+                  <strong className="text-foreground">
+                    {savedCurrency} — {BALANCE_CURRENCY_INFO[savedCurrency].name} ({BALANCE_CURRENCY_INFO[savedCurrency].symbol})
+                  </strong>.
+                </p>
+              )}
               <Link href="/auth" className="inline-flex bg-primary px-6 py-3 text-sm text-primary-foreground hover:bg-primary/90">
                 Continue to sign in
               </Link>
@@ -105,12 +154,12 @@ export default function AccountActivationPage() {
                 {isReset ? "Administrator-issued password reset" : "Secure account setup"}
               </p>
               <h1 className="mt-2 font-serif text-3xl">
-                {isReset ? "Reset your password." : "Create your password."}
+                {isReset ? "Reset your password." : "Complete your account setup."}
               </h1>
               <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
                 {isReset
                   ? "This one-time reset link is valid for 24 hours. Enter a new strong password for your Veritas Wealth profile. Any existing two-factor authentication stays active."
-                  : "This one-time link is valid for 24 hours. Choose a strong password to activate your account."}
+                  : "This one-time link is valid for 24 hours. Choose your display currency preference and a strong password to activate your account."}
               </p>
 
               {!tokenReady ? (
@@ -126,6 +175,34 @@ export default function AccountActivationPage() {
                 </div>
               ) : (
                 <form onSubmit={submit} className="mt-8 space-y-6">
+                  {!isReset && (
+                    <div className="space-y-2">
+                      <label htmlFor="activation-currency" className="label-caps text-muted-foreground">
+                        Preferred display currency
+                      </label>
+                      <select
+                        id="activation-currency"
+                        value={displayCurrency}
+                        onChange={event => {
+                          if (isBalanceCurrency(event.target.value)) {
+                            setDisplayCurrency(event.target.value);
+                          }
+                        }}
+                        className="vw-input text-foreground appearance-none cursor-pointer"
+                        data-testid="select-activation-currency"
+                      >
+                        {BALANCE_CURRENCIES.map(code => (
+                          <option key={code} value={code}>
+                            {code} — {BALANCE_CURRENCY_INFO[code].name} ({BALANCE_CURRENCY_INFO[code].symbol})
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-xs text-muted-foreground">
+                        Controls how portfolio balances appear across your portal. An administrator can adjust this later if needed.
+                      </p>
+                    </div>
+                  )}
+
                   <div className="space-y-2">
                     <label htmlFor="activation-password" className="label-caps text-muted-foreground">New password</label>
                     <input
