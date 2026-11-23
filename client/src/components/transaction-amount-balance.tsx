@@ -17,7 +17,7 @@ export function TransactionAmountBalance({
 }) {
   return (
     <div className="min-w-0 max-w-full text-right">
-      <p className={cn("whitespace-nowrap font-mono text-xs font-semibold tabular-nums sm:text-sm", amountClassName)}>
+      <p className={cn("font-mono text-xs font-semibold tabular-nums sm:text-sm sm:whitespace-nowrap [overflow-wrap:anywhere]", amountClassName)}>
         {amount}
       </p>
       {postings.map(posting => (

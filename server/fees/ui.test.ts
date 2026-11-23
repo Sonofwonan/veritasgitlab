@@ -814,4 +814,49 @@ describe("Fee interfaces rendered with synthetic cached data", () => {
       "End", "Custodian statement verified", "Cash only — insufficient cash stays unpaid",
       "Explicit fee overdraft"]) assert(html.includes(text), text);
   });
+  it("displays high-priority initial deposit banner and blocks transfer/invest dashboard actions until completed", () => {
+    const baseData = dashboardData([{ id: 25, accountType: "Brokerage Account", balance: "0.00" }]);
+    baseData.find(d => d.key[0] === "/api/user")!.value = {
+      id: 7, name: "New Client", clientRef: "VWNC2026",
+      initialDepositStatus: "required", selectedInitialDeposit: "$5,000",
+    };
+    const requiredHtml = render(DashboardPage, {}, baseData);
+    assert(requiredHtml.includes('data-testid="banner-initiate-initial-deposit"'));
+    assert(requiredHtml.indexOf('data-testid="banner-initiate-initial-deposit"') < requiredHtml.indexOf('data-testid="text-total-balance"'));
+    assert(requiredHtml.includes("Initial Deposit Required"));
+    assert(requiredHtml.includes("Transfers &amp; investing locked"));
+    assert(requiredHtml.includes("Make Initial Deposit"));
+    for (const action of ["transfer", "invest"]) {
+      const btn = requiredHtml.match(new RegExp(`<button[^>]*data-testid="button-quick-${action}"[^>]*>`))?.[0];
+      assert(btn && btn.includes("disabled") && btn.includes("data-funds-action"), `${action} should be locked`);
+    }
+    const accountsBtn = requiredHtml.match(/<button[^>]*data-testid="button-quick-accounts"[^>]*>/)?.[0];
+    assert(accountsBtn && !accountsBtn.includes("disabled"));
+    assert(requiredHtml.includes('data-testid="button-manage-holdings-locked"'));
+    assert(requiredHtml.includes('data-testid="button-holdings-invest-locked"'));
+    assert(!requiredHtml.includes("Start Investing"));
+
+    baseData.find(d => d.key[0] === "/api/user")!.value = {
+      id: 7, name: "New Client", clientRef: "VWNC2026",
+      initialDepositStatus: "pending_review", selectedInitialDeposit: "$5,000",
+    };
+    const pendingHtml = render(DashboardPage, {}, baseData);
+    assert(pendingHtml.includes("Initial Deposit Pending Review"));
+    assert(pendingHtml.includes("Pending verification"));
+    assert(pendingHtml.includes("View Deposit"));
+    assert(pendingHtml.includes('data-testid="button-holdings-invest-locked"'));
+
+    baseData.find(d => d.key[0] === "/api/user")!.value = {
+      id: 7, name: "New Client", clientRef: "VWNC2026",
+      initialDepositStatus: "completed", selectedInitialDeposit: "$5,000",
+    };
+    const completedHtml = render(DashboardPage, {}, baseData);
+    assert(!completedHtml.includes('data-testid="banner-initiate-initial-deposit"'));
+    assert(completedHtml.includes("Start Investing"));
+    for (const action of ["transfer", "invest"]) {
+      const btn = completedHtml.match(new RegExp(`<button[^>]*data-testid="button-quick-${action}"[^>]*>`))?.[0];
+      assert(btn && !btn.includes("disabled"), `${action} should unlock after completion`);
+    }
+  });
 });
+

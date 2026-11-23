@@ -50,7 +50,7 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      <div onClickCapture={guardFundsAction} className="flex h-screen w-full overflow-hidden bg-background">
+      <div onClickCapture={guardFundsAction} className="flex h-[100dvh] w-full overflow-hidden bg-background">
         <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
           <SlideOutNavigation location={location}
             open={sidebarOpen} onOpenChange={setSidebarOpen} onNavigate={setLocation} />
@@ -87,8 +87,8 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
               </div>
             </div>
           )}
-          <main className="flex-1 overflow-y-auto overflow-x-hidden p-2 md:p-3 bg-muted/5 custom-scrollbar">
-            <div className="max-w-7xl mx-auto space-y-2 md:space-y-3 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <main className="flex-1 overflow-y-auto overflow-x-hidden p-2.5 sm:p-3 md:p-4 bg-muted/5 custom-scrollbar">
+            <div className="w-full max-w-7xl mx-auto min-w-0 space-y-2.5 md:space-y-3 animate-in fade-in slide-in-from-bottom-4 duration-500">
               {children}
             </div>
           </main>
@@ -106,7 +106,7 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
 
       {/* Inactivity warning dialog */}
       <Dialog open={showWarning} onOpenChange={(open) => { if (!open) dismiss(); }}>
-        <DialogContent className="sm:max-w-sm border-amber-500/30 bg-zinc-950 wealth-panel text-white">
+        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-sm border-amber-500/30 bg-zinc-950 wealth-panel text-white">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-amber-400">
               <ShieldAlert className="w-5 h-5" />

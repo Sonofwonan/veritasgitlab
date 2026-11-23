@@ -22,8 +22,7 @@ import { DebtAccountSummary } from "@/components/fees/debt-account-summary";
 import { DebtRestrictionStatus } from "@/components/fees/debt-restriction-status";
 import { accountLabel, transactionDate, maskAccountNumber, TOTAL_OWED_LABEL, type CashPosting } from "@shared/account-display";
 import { TransactionAmountBalance } from "@/components/transaction-amount-balance";
-import { InfoTip } from "@/components/ui/info-tip";
-import { formatOnboardingLabel } from "@shared/onboarding-options";
+import { InitialDepositBanner } from "@/components/initial-deposit-banner";
 
 // ── Quick actions ─────────────────────────────────────────────────────────────
 const QUICK_ACTIONS = [
@@ -140,9 +139,15 @@ export default function DashboardPage() {
         <DebtRestrictionStatus requiresPayment={access.requiresPayment} data={access.data}
           error={access.isError} retry={() => void access.refetch()} />
 
+        <InitialDepositBanner
+          status={user?.initialDepositStatus}
+          selectedInitialDeposit={user?.selectedInitialDeposit}
+          onAction={() => setLocation("/transfers?tab=deposit")}
+        />
+
         {/* ── Transaction Detail Dialog ───────────────────────────────────── */}
         <Dialog open={!!selectedTxn} onOpenChange={o => !o && setSelectedTxn(null)}>
-          <DialogContent className="sm:max-w-md border-primary/20 bg-[#0B2218] wealth-panel text-white">
+          <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-md max-h-[88dvh] overflow-y-auto border-primary/20 bg-[#0B2218] wealth-panel text-white">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 font-serif text-xl">
                 <Info className="w-4 h-4 text-amber-400" />
@@ -158,23 +163,23 @@ export default function DashboardPage() {
                 { label: 'Type', val: selectedTxn?.transactionType },
                 { label: 'Date', val: selectedTxn?.createdAt && transactionDate(selectedTxn.createdAt,true) },
               ].map(row => row.val !== undefined && (
-                <div key={row.label} className="flex items-center justify-between py-3 text-sm">
-                  <span className="text-white/40 label-caps">{row.label}</span>
+                <div key={row.label} className="flex items-start justify-between gap-4 py-3 text-sm">
+                  <span className="text-white/40 label-caps shrink-0 pt-0.5">{row.label}</span>
                   {row.badge ? (
-                    <span className={cn('text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-sm border',
+                    <span className={cn('text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-sm border shrink-0',
                       selectedTxn?.status === 'pending'
                         ? 'border-amber-500/30 text-amber-400 bg-amber-500/10'
                         : 'border-emerald-500/30 text-emerald-400 bg-emerald-500/10'
                     )}>{row.val}</span>
                   ) : (
-                    <span className={cn('font-semibold', row.accent && 'font-mono text-amber-400 text-base')}>{row.val}</span>
+                    <span className={cn('min-w-0 text-right font-semibold [overflow-wrap:anywhere]', row.accent && 'font-mono text-amber-400 text-base tabular-nums')}>{row.val}</span>
                   )}
                 </div>
               ))}
               {(selectedTxn?.cashPostings as CashPosting[] | undefined)?.map(posting => (
-                <div key={posting.accountId} className="flex items-center justify-between gap-3 py-3 text-sm">
-                  <span className="label-caps text-white/40">Balance after transaction · {posting.accountName}</span>
-                  <span className="font-mono font-semibold text-amber-400">{fmt(posting.balanceAfter)}</span>
+                <div key={posting.accountId} className="flex items-start justify-between gap-3 py-3 text-sm">
+                  <span className="min-w-0 label-caps text-white/40 [overflow-wrap:anywhere]">Balance after transaction · {posting.accountName}</span>
+                  <span className="shrink-0 font-mono font-semibold tabular-nums text-amber-400">{fmt(posting.balanceAfter)}</span>
                 </div>
               ))}
             </div>
@@ -190,11 +195,11 @@ export default function DashboardPage() {
 
         {/* ── Portfolio Header ────────────────────────────────────────────── */}
         <div className="bg-[#0B2218] wealth-panel rounded-sm overflow-hidden">
-          <div className="px-5 sm:px-8 py-7 border-b border-white/10">
+          <div className="px-4 sm:px-6 lg:px-8 py-5 sm:py-7 border-b border-white/10">
             <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
               {/* Current funded balance; liabilities are shown separately below */}
-              <div className="min-w-0">
-                <p className="label-caps text-white/40 mb-1">{getGreeting()}, {user?.name?.split(' ')[0]} · Portfolio Overview</p>
+              <div className="min-w-0 flex-1">
+                <p className="label-caps text-white/40 mb-1 [overflow-wrap:anywhere]">{getGreeting()}, {user?.name?.split(' ')[0]} · Portfolio Overview</p>
                 <p className="text-xs text-white/60 mb-1">Total balance · Funded accounts and holdings</p>
                 <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
                   <span className={`font-sans font-bold tabular-nums text-[clamp(1.75rem,6vw,3rem)] tracking-tight break-all ${isTransmitting ? "text-violet-300" : "text-white"}`} data-testid="text-total-balance">
@@ -209,28 +214,58 @@ export default function DashboardPage() {
               </div>
               {/* Quick actions */}
               <div className="grid grid-cols-3 gap-1.5 w-full md:w-auto md:flex md:gap-2 shrink-0">
-                {QUICK_ACTIONS.map(({ label, icon: Icon, href }) => (
-                  <button key={label} onClick={() => setLocation(href)}
-                    data-funds-action={href !== "/accounts" ? "" : undefined}
-                    className="min-w-0 flex flex-col items-center gap-1.5 px-1.5 md:px-4 py-2.5 rounded-sm bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 transition-all group"
-                    data-testid={`button-quick-${label.toLowerCase()}`}>
-                    <Icon className="w-4 h-4 text-white/60 group-hover:text-white transition-colors" />
-                    <span className="text-[9px] uppercase tracking-widest text-white/40 group-hover:text-white/70 transition-colors font-semibold">{label}</span>
-                  </button>
-                ))}
+                {QUICK_ACTIONS.map(({ label, icon: Icon, href }) => {
+                  const isDepositLocked = needsInitialDeposit && href !== "/accounts";
+                  const ActionIcon = isDepositLocked ? Lock : Icon;
+                  return (
+                    <button
+                      key={label}
+                      type="button"
+                      disabled={isDepositLocked}
+                      aria-disabled={isDepositLocked || undefined}
+                      title={isDepositLocked ? "Complete initial deposit to unlock" : undefined}
+                      onClick={() => {
+                        if (!isDepositLocked) setLocation(href);
+                      }}
+                      data-funds-action={href !== "/accounts" ? "" : undefined}
+                      className={cn(
+                        "min-w-0 flex flex-col items-center gap-1.5 px-1.5 sm:px-3 md:px-4 py-2.5 rounded-sm border transition-all group",
+                        isDepositLocked
+                          ? "bg-white/[0.02] border-white/5 opacity-50 cursor-not-allowed"
+                          : "bg-white/5 hover:bg-white/10 border-white/10 hover:border-white/20"
+                      )}
+                      data-testid={`button-quick-${label.toLowerCase()}`}
+                    >
+                      <ActionIcon
+                        className={cn(
+                          "w-4 h-4 transition-colors",
+                          isDepositLocked ? "text-white/40" : "text-white/60 group-hover:text-white"
+                        )}
+                      />
+                      <span
+                        className={cn(
+                          "max-w-full truncate text-[9px] uppercase tracking-wider sm:tracking-widest transition-colors font-semibold",
+                          isDepositLocked ? "text-white/40" : "text-white/40 group-hover:text-white/70"
+                        )}
+                      >
+                        {label}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
 
           {/* KPI strip */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-white/10">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 [&>*]:border-white/10 [&>*:not(:first-child)]:border-t sm:[&>*:nth-child(2)]:border-t-0 sm:[&>*:nth-child(even)]:border-l xl:[&>*:not(:first-child)]:border-t-0 xl:[&>*:not(:first-child)]:border-l">
             {[
               { label: 'Liquid Cash',    val: cashUnavailable ? "Unavailable" : fmt(cashTotal), sub: statusUnavailable ? 'Transfer status unavailable' : access.blocked ? 'Contact your advisor' : pendingBalance !== 0 ? `${fmt(Math.abs(pendingBalance))} pending${cashLocked ? " · Transfer on hold" : ""}` : cashLocked ? 'Transfer on hold' : 'Available now', icon: Landmark },
               { label: 'Investments',    val: investmentsUnavailable ? "Unavailable" : fmt(investTotal), sub: 'Recorded investment value', icon: BarChart3 },
               { label: 'Overdraft', val: overdraftUnavailable ? "Unavailable" : fmt(overdraftTotal === 0 ? 0 : -overdraftTotal), sub: undefined, debt: true, icon: ArrowDownRight },
               { label: TOTAL_OWED_LABEL, val: feeSummary.isLoading ? "Loading…" : feeSummary.isError ? "Unavailable" : totalOwedValue, sub: undefined, debt: true, icon: Clock },
             ].map(({ label, val, sub, debt, icon: Icon }) => (
-              <div key={label} className="px-4 sm:px-6 py-4 flex items-center gap-3 min-w-0">
+              <div key={label} className="px-4 sm:px-5 py-3.5 sm:py-4 flex items-center gap-3 min-w-0">
                 <Icon className="w-4 h-4 text-white/20 shrink-0" />
                 <div className="min-w-0">
                   <p className="label-caps text-white/30 mb-0.5">{label}</p>
@@ -244,52 +279,6 @@ export default function DashboardPage() {
 
         <DebtAccountSummary summary={feeSummary.data} accounts={accounts} variant="dashboard" loading={feeSummary.isLoading}
           error={feeSummary.isError} retry={() => void feeSummary.refetch()} currency={currency} />
-
-        {/* ── Account Activation — Initial Deposit Banner (only until activated) ── */}
-        {needsInitialDeposit && !activeTransfer && (
-          <div
-            className="rounded-sm border border-primary/25 bg-primary/5 px-5 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
-            data-testid="banner-initiate-initial-deposit"
-          >
-            <div className="flex items-start gap-3">
-              <div className="w-9 h-9 rounded-sm bg-primary/15 flex items-center justify-center shrink-0 mt-0.5">
-                <Landmark className="w-4 h-4 text-primary" />
-              </div>
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-semibold text-foreground">
-                    {initialDepositPending ? "Initial Deposit Pending Review" : "Complete Initial Deposit"}
-                  </p>
-                  <InfoTip
-                    label="Initial deposit information"
-                    content="New accounts require your initial funding deposit to be submitted and verified by an administrator before transfers, additional accounts, and investing unlock."
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {user?.selectedInitialDeposit ? (
-                    <>
-                      Selected amount:{" "}
-                      <span className="font-mono font-semibold text-foreground">
-                        {formatOnboardingLabel(user.selectedInitialDeposit)}
-                      </span>
-                    </>
-                  ) : (
-                    "Required to activate account features"
-                  )}
-                  {initialDepositPending ? " · Pending Verification" : ""}
-                </p>
-              </div>
-            </div>
-            <Button
-              size="sm"
-              onClick={() => setLocation("/transfers?tab=deposit")}
-              className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-sm text-xs whitespace-nowrap shrink-0"
-              data-testid="button-dashboard-initiate-deposit"
-            >
-              {initialDepositPending ? "View Deposit" : "Make Initial Deposit"}
-            </Button>
-          </div>
-        )}
 
         {/* ── Portfolio in Transit Banner ─────────────────────────────────── */}
         {activeTransfer && (() => {
@@ -346,8 +335,8 @@ export default function DashboardPage() {
           ];
 
           return (
-            <div className={cn("rounded-sm border px-5 py-4 flex items-start justify-between gap-4", bannerBg)}>
-              <div className="flex items-start gap-3 flex-1">
+            <div className={cn("rounded-sm border px-4 sm:px-5 py-4 flex flex-col sm:flex-row sm:items-start justify-between gap-3 sm:gap-4", bannerBg)}>
+              <div className="flex items-start gap-3 flex-1 min-w-0">
                 <div className={cn("w-9 h-9 rounded-sm flex items-center justify-center shrink-0 mt-0.5", iconBg)}>
                   {iconEl}
                 </div>
@@ -360,15 +349,15 @@ export default function DashboardPage() {
                   </div>
                   <p className={cn("text-xs leading-relaxed", bodyColor)}>{bodyText}</p>
                   {/* Progress steps */}
-                  <div className="flex items-center mt-3">
+                  <div className="flex items-center mt-3 w-full max-w-full overflow-x-auto pb-1">
                     {steps.map((step, i) => (
-                      <div key={i} className="flex items-center">
+                      <div key={i} className="flex items-center shrink-0">
                         <div className="flex flex-col items-center gap-1">
                           <div className={cn("w-2 h-2 rounded-full", step.done ? dotActive : dotInactive)} />
                           <span className={cn("text-[9px] font-semibold uppercase tracking-wide whitespace-nowrap", step.done ? labelActive : labelInactive)}>{step.label}</span>
                         </div>
                         {i < steps.length - 1 && (
-                          <div className={cn("w-8 h-px mb-3.5 mx-1", step.done ? lineActive : lineInactive)} />
+                          <div className={cn("w-4 sm:w-8 h-px mb-3.5 mx-1", step.done ? lineActive : lineInactive)} />
                         )}
                       </div>
                     ))}
@@ -376,7 +365,7 @@ export default function DashboardPage() {
                   {activeTransfer.estimatedCompletionDate && (
                     <div className={cn("flex items-center gap-2 mt-3 px-3 py-2 rounded-sm", completionBg)}>
                       <Clock className={cn("w-3.5 h-3.5 shrink-0", clockColor)} />
-                      <div>
+                      <div className="min-w-0">
                         <p className={cn("text-[9px] font-bold uppercase tracking-widest", completionLabel)}>Estimated Completion</p>
                         <p className={cn("text-sm font-semibold", completionValue)}>
                           {new Date(activeTransfer.estimatedCompletionDate).toLocaleDateString("en-CA", { year: "numeric", month: "long", day: "numeric" })}
@@ -388,7 +377,7 @@ export default function DashboardPage() {
               </div>
               <button
                 onClick={() => setLocation("/transfers")}
-                className={cn("text-[10px] uppercase tracking-widest shrink-0 mt-1 flex items-center gap-0.5 transition-colors", viewColor)}
+                className={cn("text-[10px] uppercase tracking-widest shrink-0 self-end sm:self-start mt-1 flex items-center gap-0.5 transition-colors", viewColor)}
               >
                 View <ChevronRight className="w-3 h-3" />
               </button>
@@ -409,10 +398,22 @@ export default function DashboardPage() {
                   <p className="font-semibold text-sm">Holdings</p>
                   <p className="text-[10px] text-muted-foreground mt-0.5">Your recorded investments</p>
                 </div>
-                <Button variant="ghost" size="sm" className="text-xs text-primary hover:bg-primary/5 gap-1"
-                  data-funds-action="" onClick={() => setLocation('/investments')}>
-                  Manage <ChevronRight className="w-3 h-3" />
-                </Button>
+                {needsInitialDeposit ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled
+                    className="text-xs text-muted-foreground gap-1 cursor-not-allowed"
+                    data-testid="button-manage-holdings-locked"
+                  >
+                    <Lock className="w-3 h-3" /> Locked
+                  </Button>
+                ) : (
+                  <Button variant="ghost" size="sm" className="text-xs text-primary hover:bg-primary/5 gap-1"
+                    data-funds-action="" onClick={() => setLocation('/investments')}>
+                    Manage <ChevronRight className="w-3 h-3" />
+                  </Button>
+                )}
               </div>
 
               {/* Table header */}
@@ -464,9 +465,21 @@ export default function DashboardPage() {
                 <div className="py-12 text-center">
                   <BarChart3 className="w-8 h-8 text-muted-foreground/20 mx-auto mb-3" />
                   <p className="text-sm text-muted-foreground">No holdings yet</p>
-                  <Button size="sm" variant="outline" className="mt-3 rounded-sm text-xs gap-1" data-funds-action="" onClick={() => setLocation('/investments')}>
-                    <TrendingUp className="w-3 h-3" /> Start Investing
-                  </Button>
+                  {needsInitialDeposit ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled
+                      className="mt-3 rounded-sm text-xs gap-1.5 opacity-60 cursor-not-allowed"
+                      data-testid="button-holdings-invest-locked"
+                    >
+                      <Lock className="w-3 h-3" /> Investing Locked
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="outline" className="mt-3 rounded-sm text-xs gap-1" data-funds-action="" onClick={() => setLocation('/investments')}>
+                      <TrendingUp className="w-3 h-3" /> Start Investing
+                    </Button>
+                  )}
                 </div>
               )}
             </div>
@@ -518,7 +531,7 @@ export default function DashboardPage() {
                             isPending ? 'text-amber-800 dark:text-amber-300' : 'text-muted-foreground')}>{txn.status}</p>
                         </div>
                       </div>
-                      <div className="flex min-w-0 max-w-[60%] shrink-0 flex-col items-end gap-0.5">
+                      <div className="flex min-w-0 max-w-[52%] sm:max-w-[45%] shrink-0 flex-col items-end gap-0.5">
                         <TransactionAmountBalance
                           amount={`${internal ? "↔ " : isIn ? "+" : "−"}${fmt(Number(txn.amount))}`}
                           currency={currency}
