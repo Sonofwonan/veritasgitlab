@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useMutation } from "@tanstack/react-query";
 import { BrandedLoader } from "@/components/branded-loader";
 import { SessionLoadError } from "@/components/session-load-error";
+import { InfoTip } from "@/components/ui/info-tip";
 
 import {
   ANNUAL_INCOME_OPTIONS,
@@ -295,9 +296,12 @@ function ApplicationForm({ onBack }: { onBack: () => void }) {
         )}
 
         {step === 2 && (
-          <div className="pt-2 text-xs text-muted-foreground border-t border-border space-y-1.5 leading-relaxed">
-            <p>By submitting this form you confirm that everything you have provided is accurate and that you are the beneficial owner of the assets to be invested. You agree to our Terms of Service and Privacy Policy.</p>
-            <p>You will create your password and finalize your display currency preference once your application is approved, using a one-time setup link.</p>
+          <div className="pt-2 flex items-center gap-2 text-xs text-muted-foreground border-t border-border">
+            <span>Terms &amp; account activation</span>
+            <InfoTip
+              label="Application terms and activation"
+              content="By submitting this form you confirm that everything provided is accurate, that you are the beneficial owner of the assets, and agree to our Terms of Service and Privacy Policy. Once approved, you will receive a one-time setup link to set your password."
+            />
           </div>
         )}
 
