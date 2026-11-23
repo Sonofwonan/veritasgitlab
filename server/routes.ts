@@ -7,7 +7,7 @@ import { api, errorSchemas, insertPayeeSchema } from "@shared/routes";
 import { z } from "zod";
 import { type User, accounts, transactions, payees, applications, users, institutionalTransfers, accountSetupTokens, accountOpeningRequests, investments } from "@shared/schema";
 import { db, pool } from "./db";
-import { eq, or, desc, sql, inArray } from "drizzle-orm";
+import { and, eq, or, desc, sql, inArray } from "drizzle-orm";
 import twilio from "twilio";
 import passport from "passport";
 import { registerFeeRoutes } from "./fees/routes";
@@ -93,7 +93,9 @@ export async function registerRoutes(
         ADD COLUMN IF NOT EXISTS display_currency TEXT NOT NULL DEFAULT 'CAD',
         ADD COLUMN IF NOT EXISTS debt_clearance_required BOOLEAN NOT NULL DEFAULT FALSE,
         ADD COLUMN IF NOT EXISTS debt_payment_account_id INTEGER,
-        ADD COLUMN IF NOT EXISTS debt_payment_confirmed_at TIMESTAMP;
+        ADD COLUMN IF NOT EXISTS debt_payment_confirmed_at TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS initial_deposit_status TEXT NOT NULL DEFAULT 'completed',
+        ADD COLUMN IF NOT EXISTS selected_initial_deposit TEXT;
       ALTER TABLE payees
         ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending_approval',
         ADD COLUMN IF NOT EXISTS admin_notes TEXT,
@@ -208,6 +210,18 @@ export async function registerRoutes(
   ]);
   const requireFundsAccess = fundsAccessGuard(pool);
   const requireFundsAccessOrDeposit = fundsAccessGuard(pool, true);
+
+  const isUnactivatedClient = (u: any) =>
+    u?.initialDepositStatus === "required" || u?.initialDepositStatus === "pending_review";
+  const requireActivatedClient = (req: any, res: any, next: any) => {
+    if (isUnactivatedClient(req.user)) {
+      return res.status(403).json({
+        message: "Complete your initial deposit to activate your account.",
+        code: "INITIAL_DEPOSIT_REQUIRED",
+      });
+    }
+    return next();
+  };
 
   const { requireAdmin, requireIdentifiedStaff } = await setupAdminAuth(app, pool);
   registerAdminLedgerRoutes(app, pool, requireAdmin, requireIdentifiedStaff);
@@ -440,7 +454,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/account-requests", requireAuth, requireFundsAccess, requireNoLiquidation, async (req, res) => {
+  app.post("/api/account-requests", requireAuth, requireActivatedClient, requireFundsAccess, requireNoLiquidation, async (req, res) => {
     res.set("Cache-Control", "no-store");
     try {
       const input = clientAccountOpeningRequestSchema.parse(req.body);
@@ -516,6 +530,11 @@ export async function registerRoutes(
             isDemo: false,
           }).returning();
 
+          await tx
+            .update(users)
+            .set({ initialDepositStatus: "pending_review" })
+            .where(and(eq(users.id, (req.user as User).id), eq(users.initialDepositStatus, "required")));
+
           return t;
         });
         await recordTransactionAudit(pool, {
@@ -528,6 +547,13 @@ export async function registerRoutes(
           reason: `Client initiated deposit (${methodLabel}) to ${accountLabel(toAccount)}`,
         });
         return res.status(201).json(transaction);
+      }
+
+      if (isUnactivatedClient(req.user)) {
+        return res.status(403).json({
+          message: "Complete your initial deposit to activate your account.",
+          code: "INITIAL_DEPOSIT_REQUIRED",
+        });
       }
 
       // Verify ownership of fromAccount
@@ -593,7 +619,7 @@ export async function registerRoutes(
     res.json(allInvestments);
   });
 
-  app.post(api.investments.buy.path, requireAuth, requireFundsAccess, requireNoLiquidation, async (req, res) => {
+  app.post(api.investments.buy.path, requireAuth, requireActivatedClient, requireFundsAccess, requireNoLiquidation, async (req, res) => {
     try {
       const { accountId } = api.investments.buy.input.parse(req.body);
        // Verify ownership
@@ -609,7 +635,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post(api.investments.sell.path, requireAuth, requireFundsAccess, requireNoLiquidation, async (req, res) => {
+  app.post(api.investments.sell.path, requireAuth, requireActivatedClient, requireFundsAccess, requireNoLiquidation, async (req, res) => {
     try {
       const { accountId } = api.investments.sell.input.parse(req.body);
        // Verify ownership
@@ -756,19 +782,23 @@ export async function registerRoutes(
     }
   });
 
-  app.post('/api/payees', requireAuth, requireNoLiquidation, async (req, res) => {
+  app.post('/api/payees', requireAuth, requireActivatedClient, requireNoLiquidation, async (req, res) => {
     try {
+      const fallbackCurrency = isBalanceCurrency((req.user as any)?.displayCurrency)
+        ? (req.user as any).displayCurrency
+        : "CAD";
       const payeeInput = z.object({
         name: z.string().trim().min(2, "Beneficiary name is required").max(160),
         bankName: z.string().trim().min(2, "Bank name is required").max(160),
-        accountNumber: z.string().trim().min(4, "IBAN or account number is required").max(64),
-        routingNumber: z.string().trim().min(4, "SWIFT / BIC or routing number is required").max(64),
-        country: z.string().trim().min(2, "Country is required").max(120).optional().default("Canada"),
-        currency: z.enum(BALANCE_CURRENCIES).optional().default("USD"),
+        accountNumber: z.string().trim().min(4, "Account number or IBAN is required").max(64),
+        routingNumber: z.string().trim().min(4, "Routing number or SWIFT / BIC is required").max(64),
+        country: z.string().trim().min(2, "Country is required").max(120).optional().default("Domestic"),
+        currency: z.enum(BALANCE_CURRENCIES).optional(),
         type: z.enum(["individual", "business"]).optional().default("individual"),
       }).parse(req.body);
       const payee = await storage.createPayee({
         ...payeeInput,
+        currency: payeeInput.currency ?? fallbackCurrency,
         userId: (req.user as User).id,
         status: "pending_approval",
       } as any);
@@ -795,7 +825,7 @@ export async function registerRoutes(
   });
 
   // External Wire / International Payment Route
-  app.post('/api/transactions/payment', requireAuth, requireFundsAccess, requireNoLiquidation, async (req, res) => {
+  app.post('/api/transactions/payment', requireAuth, requireActivatedClient, requireFundsAccess, requireNoLiquidation, async (req, res) => {
     try {
       const { fromAccountId, payeeId, amount, description, wireType, targetCurrency, reference } = z.object({
         fromAccountId: z.coerce.number().int().positive(),
@@ -834,9 +864,16 @@ export async function registerRoutes(
           throw new Error("This beneficiary was declined and cannot receive wire transfers");
         }
 
+        const userDisplayCurrency = isBalanceCurrency((req.user as any)?.displayCurrency)
+          ? (req.user as any).displayCurrency
+          : "";
         const scopeLabel = wireType === "international" ? "International SWIFT Wire" : "Domestic Wire";
-        const currLabel = targetCurrency || payee.currency || "";
-        const countryLabel = payee.country ? ` · ${payee.country}` : "";
+        const currLabel = wireType === "domestic"
+          ? (targetCurrency || userDisplayCurrency)
+          : (targetCurrency || payee.currency || "");
+        const countryLabel = wireType === "international" && payee.country && payee.country !== "Domestic"
+          ? ` · ${payee.country}`
+          : "";
         const refSuffix = reference ? ` · Ref: ${reference}` : "";
         const descSuffix = description ? ` — ${description}` : "";
         const finalDescription = `${scopeLabel} to ${payee.name}${countryLabel}${currLabel ? ` (${currLabel})` : ""}${descSuffix}${refSuffix}`.slice(0, 250);
@@ -1103,6 +1140,8 @@ export async function registerRoutes(
           password: unavailablePasswordHash,
           phoneNumber: app.phone,
           displayCurrency: initialDisplayCurrency,
+          initialDepositStatus: "required",
+          selectedInitialDeposit: app.initialDeposit || null,
         }).returning();
 
         // Create an investment-only brokerage account with no liquid cash.
@@ -1709,6 +1748,34 @@ export async function registerRoutes(
     }
   });
 
+  // Manually verify and activate an account awaiting initial deposit
+  app.post("/api/admin/users/:id/activate-account", requireAdmin, async (req, res) => {
+    const parsedId = z.coerce.number().int().positive().safeParse(req.params.id);
+    if (!parsedId.success) {
+      return res.status(400).json({ message: "Invalid client user ID" });
+    }
+    const userId = parsedId.data;
+    try {
+      const { rows: [updated] } = await pool.query(
+        `UPDATE users
+         SET initial_deposit_status = 'completed'
+         WHERE id = $1
+         RETURNING id, initial_deposit_status AS "initialDepositStatus"`,
+        [userId],
+      );
+      if (!updated) {
+        return res.status(404).json({ message: "Client profile not found" });
+      }
+      await pool.query(
+        `INSERT INTO client_security_events (user_id, event) VALUES ($1, $2)`,
+        [userId, "initial_deposit_activated_by_admin"],
+      ).catch(() => {});
+      return res.json({ ok: true, initialDepositStatus: updated.initialDepositStatus });
+    } catch (err: any) {
+      return res.status(500).json({ message: err?.message || "Failed to activate client account" });
+    }
+  });
+
   // Approve a pending client transaction (after verifying real-world movement)
   app.post("/api/admin/transactions/:id/approve", requireAdmin, async (req, res) => {
     try {
@@ -1739,6 +1806,19 @@ export async function registerRoutes(
              audit_reason = COALESCE(audit_reason, $4)
          WHERE id = $1`,
         [id, req.adminStaff?.id ?? null, staffName, reasonText],
+      );
+
+      await pool.query(
+        `UPDATE users u
+         SET initial_deposit_status = 'completed'
+         FROM transactions t
+         JOIN accounts a ON a.id = t.to_account_id
+         WHERE t.id = $1
+           AND t.from_account_id IS NULL
+           AND t.to_account_id IS NOT NULL
+           AND u.id = a.user_id
+           AND u.initial_deposit_status IN ('required', 'pending_review')`,
+        [id],
       );
 
       await recordTransactionAudit(pool, {
@@ -1796,6 +1876,29 @@ export async function registerRoutes(
             auditReason: reason,
           } as any)
           .where(eq(transactions.id, id));
+
+        if (!txn.fromAccountId && txn.toAccountId) {
+          const [destAcc] = await tx.select({ userId: accounts.userId }).from(accounts).where(eq(accounts.id, txn.toAccountId));
+          if (destAcc?.userId) {
+            const ownerAccounts = await tx.select({ id: accounts.id }).from(accounts).where(eq(accounts.userId, destAcc.userId));
+            const ownerAccIds = ownerAccounts.map(a => a.id);
+            const pendingDeposits = ownerAccIds.length > 0
+              ? await tx.select({ id: transactions.id })
+                  .from(transactions)
+                  .where(and(
+                    inArray(transactions.toAccountId, ownerAccIds),
+                    sql`${transactions.fromAccountId} IS NULL`,
+                    eq(transactions.status, "pending"),
+                  ))
+                  .limit(1)
+              : [];
+            if (pendingDeposits.length === 0) {
+              await tx.update(users)
+                .set({ initialDepositStatus: "required" })
+                .where(and(eq(users.id, destAcc.userId), eq(users.initialDepositStatus, "pending_review")));
+            }
+          }
+        }
       });
 
       await recordTransactionAudit(pool, {
@@ -1820,7 +1923,7 @@ export async function registerRoutes(
   // ─── Institutional Transfer Routes ────────────────────────────────────────────
 
   // Client: submit a new institutional transfer request
-  app.post("/api/institutional-transfers", requireAuth, requireFundsAccess, requireLiquidationVerification, async (req, res) => {
+  app.post("/api/institutional-transfers", requireAuth, requireActivatedClient, requireFundsAccess, requireLiquidationVerification, async (req, res) => {
     if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
     try {
       const destination = institutionalDestinationSchema.safeParse(req.body);

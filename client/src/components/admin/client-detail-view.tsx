@@ -209,6 +209,26 @@ export function ClientDetailView({
     },
   });
 
+  const activateAccountMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/admin/users/${userId}/activate-account`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${adminKey}`,
+          "x-admin-key": adminKey,
+        },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.message || "Could not activate client account");
+      return data;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["/api/admin/users", userId, "details"] });
+      void queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+    },
+  });
+
   const handleCopyRef = async (refText: string) => {
     try {
       await navigator.clipboard.writeText(refText);
@@ -296,6 +316,15 @@ export function ClientDetailView({
               {user.accountFrozen && <StatusTag tone="sky"><Snowflake className="h-3 w-3" /> Frozen</StatusTag>}
               {user.loginRestricted && !user.accountFrozen && <StatusTag tone="red"><Lock className="h-3 w-3" /> Login Restricted</StatusTag>}
               {!user.accountFrozen && !user.loginRestricted && <StatusTag tone="emerald">Active Standing</StatusTag>}
+              {user.initialDepositStatus === "required" && (
+                <StatusTag tone="amber">Awaiting Initial Deposit</StatusTag>
+              )}
+              {user.initialDepositStatus === "pending_review" && (
+                <StatusTag tone="amber">Initial Deposit Pending Review</StatusTag>
+              )}
+              {(!user.initialDepositStatus || user.initialDepositStatus === "completed") && (
+                <StatusTag tone="emerald">Activated</StatusTag>
+              )}
               {user.debtClearanceRequired && <StatusTag tone="amber">Debt Clearance Lock</StatusTag>}
               <StatusTag tone={security.mfaEnabled ? "emerald" : "neutral"}>
                 {security.mfaEnabled ? "2FA Enabled" : "2FA Disabled"}
@@ -359,6 +388,20 @@ export function ClientDetailView({
               )}
               Generate Password Reset Link
             </Button>
+
+            {(user.initialDepositStatus === "required" || user.initialDepositStatus === "pending_review") && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={activateAccountMutation.isPending}
+                onClick={() => activateAccountMutation.mutate()}
+                className="h-8 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10 text-xs whitespace-nowrap shrink-0"
+                data-testid="button-admin-activate-account"
+              >
+                <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
+                {activateAccountMutation.isPending ? "Activating…" : "Activate Account"}
+              </Button>
+            )}
 
             <Button
               size="sm"
@@ -589,6 +632,24 @@ export function ClientDetailView({
                   {BALANCE_CURRENCY_INFO[currency].name} ({currency} · Presentation only)
                 </dd>
               </div>
+              <div>
+                <dt className="text-[11px] uppercase tracking-wider text-slate-400">Account Activation</dt>
+                <dd className="mt-0.5 text-slate-200">
+                  {user.initialDepositStatus === "required"
+                    ? "Awaiting Initial Deposit"
+                    : user.initialDepositStatus === "pending_review"
+                      ? "Initial Deposit Pending Verification"
+                      : "Activated"}
+                </dd>
+              </div>
+              {user.selectedInitialDeposit && (
+                <div>
+                  <dt className="text-[11px] uppercase tracking-wider text-slate-400">Selected Initial Deposit</dt>
+                  <dd className="mt-0.5 text-emerald-300 font-medium">
+                    {formatOnboardingLabel(user.selectedInitialDeposit)}
+                  </dd>
+                </div>
+              )}
               <div>
                 <dt className="text-[11px] uppercase tracking-wider text-slate-400">Registered On</dt>
                 <dd className="mt-0.5 font-mono text-slate-300">{new Date(user.createdAt).toLocaleString()}</dd>

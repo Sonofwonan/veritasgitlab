@@ -22,6 +22,8 @@ import { DebtAccountSummary } from "@/components/fees/debt-account-summary";
 import { DebtRestrictionStatus } from "@/components/fees/debt-restriction-status";
 import { accountLabel, transactionDate, maskAccountNumber, TOTAL_OWED_LABEL, type CashPosting } from "@shared/account-display";
 import { TransactionAmountBalance } from "@/components/transaction-amount-balance";
+import { InfoTip } from "@/components/ui/info-tip";
+import { formatOnboardingLabel } from "@shared/onboarding-options";
 
 // ── Quick actions ─────────────────────────────────────────────────────────────
 const QUICK_ACTIONS = [
@@ -52,6 +54,9 @@ function categoryOf(type: string) {
 export default function DashboardPage() {
   const { user } = useAuth();
   const currency = clientBalanceCurrency(user);
+  const initialDepositRequired = user?.initialDepositStatus === "required";
+  const initialDepositPending = user?.initialDepositStatus === "pending_review";
+  const needsInitialDeposit = initialDepositRequired || initialDepositPending;
   const access = useFundsAccess();
   const [, setLocation] = useLocation();
   const snapshot = useClientAccountSnapshot();
@@ -240,8 +245,8 @@ export default function DashboardPage() {
         <DebtAccountSummary summary={feeSummary.data} accounts={accounts} variant="dashboard" loading={feeSummary.isLoading}
           error={feeSummary.isError} retry={() => void feeSummary.refetch()} currency={currency} />
 
-        {/* ── Initial Deposit Callout for Newly Approved Unfunded Accounts ── */}
-        {!accountsLoading && !balanceUnavailable && cashTotal === 0 && investTotal === 0 && !activeTransfer && (
+        {/* ── Account Activation — Initial Deposit Banner (only until activated) ── */}
+        {needsInitialDeposit && !activeTransfer && (
           <div
             className="rounded-sm border border-primary/25 bg-primary/5 px-5 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
             data-testid="banner-initiate-initial-deposit"
@@ -251,9 +256,27 @@ export default function DashboardPage() {
                 <Landmark className="w-4 h-4 text-primary" />
               </div>
               <div className="space-y-1">
-                <p className="text-sm font-semibold text-foreground">Fund your portfolio</p>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  Initiate your initial deposit by submitting your incoming wire, SWIFT, or bank transfer instructions for administrative verification and posting.
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-semibold text-foreground">
+                    {initialDepositPending ? "Initial Deposit Pending Review" : "Complete Initial Deposit"}
+                  </p>
+                  <InfoTip
+                    label="Initial deposit information"
+                    content="New accounts require your initial funding deposit to be submitted and verified by an administrator before transfers, additional accounts, and investing unlock."
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {user?.selectedInitialDeposit ? (
+                    <>
+                      Selected amount:{" "}
+                      <span className="font-mono font-semibold text-foreground">
+                        {formatOnboardingLabel(user.selectedInitialDeposit)}
+                      </span>
+                    </>
+                  ) : (
+                    "Required to activate account features"
+                  )}
+                  {initialDepositPending ? " · Pending Verification" : ""}
                 </p>
               </div>
             </div>
@@ -263,7 +286,7 @@ export default function DashboardPage() {
               className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-sm text-xs whitespace-nowrap shrink-0"
               data-testid="button-dashboard-initiate-deposit"
             >
-              Initiate Initial Deposit
+              {initialDepositPending ? "View Deposit" : "Make Initial Deposit"}
             </Button>
           </div>
         )}

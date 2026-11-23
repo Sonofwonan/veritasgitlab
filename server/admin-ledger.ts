@@ -1004,6 +1004,17 @@ export function registerAdminLedgerRoutes(
           }
           if (request.to_account_id != null) {
             await client.query(`SELECT record_cash_posting($1::integer, $2::integer)`, [postedTxn.id, request.to_account_id]);
+            if (request.from_account_id == null) {
+              const destAcc = byId.get(request.to_account_id);
+              if (destAcc?.user_id) {
+                await client.query(
+                  `UPDATE users
+                   SET initial_deposit_status = 'completed'
+                   WHERE id = $1 AND initial_deposit_status IN ('required', 'pending_review')`,
+                  [destAcc.user_id],
+                );
+              }
+            }
           }
 
           await client.query(

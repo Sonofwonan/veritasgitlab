@@ -166,6 +166,7 @@ export function useTransfer() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.accounts.list.path] });
       queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
+      queryClient.invalidateQueries({ queryKey: [api.auth.me.path] });
     },
   });
 }

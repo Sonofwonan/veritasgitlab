@@ -29,6 +29,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import { clientBalanceCurrency, formatBalance } from "@shared/balance-currency";
+import { InfoTip } from "@/components/ui/info-tip";
 
 type AccountType = 'Brokerage Account' | 'Traditional IRA' | 'Roth IRA' |
   '401(k) / 403(b)' | '529 Savings Plan' | 'Trust Account';
@@ -121,6 +122,9 @@ export default function AccountsPage() {
   const feeSummary = useClientFeeSummary();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
+  const initialDepositRequired = user?.initialDepositStatus === "required";
+  const initialDepositPending = user?.initialDepositStatus === "pending_review";
+  const needsInitialDeposit = initialDepositRequired || initialDepositPending;
   const { transfers: instTransfers } = useActiveLiquidation();
   const activeTransfer = (instTransfers as any[]).find((t: any) =>
     ["pending", "under_review", "approved", "liquidating", "transfer_out"].includes(t.status)
@@ -190,8 +194,8 @@ export default function AccountsPage() {
           setIsOpen(false);
           setRequestForm(INITIAL_FORM_STATE);
           setFeedback({
-            title: 'Account Request Submitted',
-            message: `Your request (#AR-${created.id}) to establish a ${created.accountType} has been logged for compliance and administrative review. Once approved, your new account number will appear in your portfolio.`,
+            title: 'Application Submitted',
+            message: `Reference #AR-${created.id} (${created.accountType}) is pending review.`,
             type: 'success',
           });
         },
@@ -231,13 +235,20 @@ export default function AccountsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Account Opening Request Form Dialog */}
+      {/* Open Account Form Dialog */}
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
         <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto bg-[#0B2218] wealth-panel border-white/10 text-white">
           <DialogHeader>
-            <DialogTitle className="font-serif text-xl text-white">Account Opening Request</DialogTitle>
-            <DialogDescription className="text-white/60 text-xs leading-relaxed">
-              Submit a formal request to establish an additional investment or fiduciary account. All new accounts undergo institutional suitability and compliance review prior to activation.
+            <DialogTitle className="font-serif text-xl text-white flex items-center gap-2">
+              Open Account
+              <InfoTip
+                label="Account opening review details"
+                content="Additional accounts undergo compliance and administrative review before provisioning."
+                className="border-white/20 bg-white/10 text-white/80 hover:text-white"
+              />
+            </DialogTitle>
+            <DialogDescription className="sr-only">
+              Submit an account application for administrative review.
             </DialogDescription>
           </DialogHeader>
 
@@ -269,7 +280,7 @@ export default function AccountsPage() {
 
               <div className="space-y-1.5">
                 <label htmlFor="req-display-name" className="label-caps text-white/60 block">
-                  Account Designation <span className="normal-case text-white/40">(optional)</span>
+                  Nickname <span className="normal-case text-white/40">(optional)</span>
                 </label>
                 <Input
                   id="req-display-name"
@@ -277,7 +288,7 @@ export default function AccountsPage() {
                   maxLength={80}
                   value={requestForm.requestedDisplayName}
                   onChange={e => setRequestForm(f => ({ ...f, requestedDisplayName: e.target.value }))}
-                  placeholder="e.g. Family Education Trust"
+                  placeholder="e.g. Family Trust"
                   className="bg-white/5 border-white/15 text-white placeholder:text-white/30 rounded-sm h-10"
                   data-testid="input-request-display-name"
                 />
@@ -285,7 +296,7 @@ export default function AccountsPage() {
 
               <div className="space-y-1.5">
                 <label htmlFor="req-ownership-structure" className="label-caps text-white/60 block">
-                  Ownership Structure
+                  Ownership
                 </label>
                 <Select
                   value={requestForm.ownershipStructure}
@@ -304,7 +315,7 @@ export default function AccountsPage() {
 
               <div className="space-y-1.5">
                 <label htmlFor="req-jurisdiction" className="label-caps text-white/60 block">
-                  Tax Residency / Jurisdiction
+                  Jurisdiction
                 </label>
                 <Select
                   value={requestForm.jurisdiction}
@@ -323,7 +334,7 @@ export default function AccountsPage() {
 
               <div className="space-y-1.5">
                 <label htmlFor="req-investment-objective" className="label-caps text-white/60 block">
-                  Investment Objective
+                  Objective
                 </label>
                 <Select
                   value={requestForm.investmentObjective}
@@ -342,7 +353,7 @@ export default function AccountsPage() {
 
               <div className="space-y-1.5">
                 <label htmlFor="req-risk-tolerance" className="label-caps text-white/60 block">
-                  Risk Tolerance
+                  Risk Level
                 </label>
                 <Select
                   value={requestForm.riskTolerance}
@@ -361,7 +372,7 @@ export default function AccountsPage() {
 
               <div className="space-y-1.5">
                 <label htmlFor="req-funding-source" className="label-caps text-white/60 block">
-                  Anticipated Funding Source
+                  Funding Source
                 </label>
                 <Select
                   value={requestForm.fundingSource}
@@ -380,7 +391,7 @@ export default function AccountsPage() {
 
               <div className="space-y-1.5">
                 <label htmlFor="req-initial-funding" className="label-caps text-white/60 block">
-                  Expected Initial Funding
+                  Initial Funding
                 </label>
                 <Select
                   value={requestForm.expectedInitialFunding}
@@ -400,7 +411,7 @@ export default function AccountsPage() {
 
             <div className="space-y-1.5">
               <label htmlFor="req-additional-notes" className="label-caps text-white/60 block">
-                Instructions / Advisor Context <span className="normal-case text-white/40">(optional)</span>
+                Notes <span className="normal-case text-white/40">(optional)</span>
               </label>
               <Textarea
                 id="req-additional-notes"
@@ -408,29 +419,31 @@ export default function AccountsPage() {
                 maxLength={1000}
                 value={requestForm.additionalNotes}
                 onChange={e => setRequestForm(f => ({ ...f, additionalNotes: e.target.value }))}
-                placeholder="Provide beneficiary details, rollover institution notes, or mandate instructions for your advisor."
-                className="bg-white/5 border-white/15 text-white placeholder:text-white/30 rounded-sm min-h-[84px] resize-none"
+                placeholder="Optional advisor instructions"
+                className="bg-white/5 border-white/15 text-white placeholder:text-white/30 rounded-sm min-h-[72px] resize-none"
                 data-testid="input-request-notes"
               />
             </div>
 
-            <label
-              htmlFor="req-client-declaration"
-              className="flex items-start gap-3 rounded-sm border border-white/15 bg-white/5 p-3 text-xs text-white/80 cursor-pointer"
-            >
-              <input
-                id="req-client-declaration"
-                name="clientDeclarationAccepted"
-                type="checkbox"
-                checked={requestForm.clientDeclarationAccepted}
-                onChange={e => setRequestForm(f => ({ ...f, clientDeclarationAccepted: e.target.checked }))}
-                className="mt-0.5 shrink-0"
-                data-testid="checkbox-request-attestation"
+            <div className="flex items-center justify-between gap-3 rounded-sm border border-white/15 bg-white/5 px-3 py-2.5 text-xs text-white/85">
+              <label htmlFor="req-client-declaration" className="flex items-center gap-2.5 cursor-pointer">
+                <input
+                  id="req-client-declaration"
+                  name="clientDeclarationAccepted"
+                  type="checkbox"
+                  checked={requestForm.clientDeclarationAccepted}
+                  onChange={e => setRequestForm(f => ({ ...f, clientDeclarationAccepted: e.target.checked }))}
+                  className="shrink-0"
+                  data-testid="checkbox-request-attestation"
+                />
+                <span>Confirm application details</span>
+              </label>
+              <InfoTip
+                label="Account opening attestation"
+                content="I confirm the mandate and funding information above is accurate and acknowledge that this account will only be provisioned after compliance and administrative approval."
+                className="border-white/20 bg-white/10 text-white/80 hover:text-white"
               />
-              <span className="leading-relaxed">
-                I confirm the mandate and funding information above is accurate and acknowledge that this account will only be provisioned after compliance and administrative approval.
-              </span>
-            </label>
+            </div>
 
             <DialogFooter className="pt-2">
               <Button type="button" variant="ghost" className="text-white/50 hover:text-white" onClick={() => setIsOpen(false)}>
@@ -442,7 +455,7 @@ export default function AccountsPage() {
                 className="bg-white text-[#0B2218] hover:bg-white/90 rounded-sm font-semibold whitespace-nowrap shrink-0"
                 data-testid="button-submit-account-request"
               >
-                {createAccountRequest.isPending ? 'Submitting Request…' : 'Submit Account Request'}
+                {createAccountRequest.isPending ? 'Submitting…' : 'Open Account'}
               </Button>
             </DialogFooter>
           </form>
@@ -478,19 +491,12 @@ export default function AccountsPage() {
               <div className="w-px h-4 bg-white/10" />
               <Button
                 size="sm"
-                onClick={() => setLocation("/transfers?tab=deposit")}
-                className="min-h-10 bg-primary hover:bg-primary/90 text-white rounded-sm text-xs gap-1.5 whitespace-nowrap shrink-0"
-                data-testid="button-initiate-deposit-accounts"
-              >
-                <Landmark className="w-3 h-3" /> Initiate Deposit
-              </Button>
-              <Button
-                size="sm"
+                disabled={needsInitialDeposit}
                 onClick={() => setIsOpen(true)}
                 className="min-h-10 bg-white/10 hover:bg-white/20 text-white border border-white/10 rounded-sm text-xs gap-1.5 whitespace-nowrap shrink-0"
                 data-testid="button-request-account"
               >
-                <Plus className="w-3 h-3" /> Request Account
+                <Plus className="w-3 h-3" /> Open Account
               </Button>
             </div>
           </div>
@@ -566,6 +572,34 @@ export default function AccountsPage() {
             hidden={hideBalances} currency={currency} />
         </div>
       </div>
+
+      {/* ── Activation Notice (only when initial deposit required/pending) ── */}
+      {needsInitialDeposit && (
+        <div
+          className="rounded-sm border border-primary/25 bg-primary/5 px-4 py-3 mt-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+          data-testid="accounts-activation-notice"
+        >
+          <div className="flex items-center gap-2 text-xs text-foreground">
+            <Lock className="w-3.5 h-3.5 text-primary shrink-0" />
+            <span>
+              {initialDepositPending
+                ? "Initial deposit pending review — additional accounts unlock after verification."
+                : "Complete your initial deposit to unlock additional accounts."}
+            </span>
+            <InfoTip
+              label="Account activation notice"
+              content="Your primary brokerage account is ready to receive your initial deposit. Once an administrator verifies it, opening additional accounts will unlock."
+            />
+          </div>
+          <Button
+            size="sm"
+            onClick={() => setLocation("/transfers?tab=deposit")}
+            className="rounded-sm text-xs whitespace-nowrap shrink-0"
+          >
+            {initialDepositPending ? "View Deposit" : "Make Initial Deposit"}
+          </Button>
+        </div>
+      )}
 
       {/* ── Transfer Lock Banner ──────────────────────────────────── */}
       {activeTransfer && (
@@ -717,25 +751,31 @@ export default function AccountsPage() {
         <div className="flex items-center justify-between gap-3 mb-2 pb-2 border-b border-border">
           <div className="flex items-center gap-2">
             <FileText className="w-3.5 h-3.5 text-primary" />
-            <span className="label-caps text-muted-foreground">Account Opening Requests</span>
+            <span className="label-caps text-muted-foreground">Account Requests</span>
             {accountRequests && (
               <span className="text-[10px] text-muted-foreground/60 font-mono">({accountRequests.length})</span>
             )}
+            <InfoTip
+              label="Account requests status"
+              content="New account applications appear here while under administrative review."
+            />
           </div>
-          <button
-            type="button"
-            onClick={() => setIsOpen(true)}
-            className="text-xs font-medium text-primary hover:underline whitespace-nowrap shrink-0"
-          >
-            + Submit Request
-          </button>
+          {!needsInitialDeposit && (
+            <button
+              type="button"
+              onClick={() => setIsOpen(true)}
+              className="text-xs font-medium text-primary hover:underline whitespace-nowrap shrink-0"
+            >
+              + Open Account
+            </button>
+          )}
         </div>
 
         {requestsLoading ? (
-          <div className="py-4 text-xs text-muted-foreground">Loading account opening requests…</div>
+          <div className="py-4 text-xs text-muted-foreground">Loading…</div>
         ) : !accountRequests || accountRequests.length === 0 ? (
           <div className="py-6 text-xs text-muted-foreground">
-            No additional account opening requests submitted. Use <strong>Request Account</strong> above to apply for a new investment or fiduciary mandate.
+            No account requests yet.
           </div>
         ) : (
           <div className="divide-y divide-border/50">

@@ -16,8 +16,10 @@ import { useFundsAccess } from "@/hooks/use-funds-access";
 import { FundsAccessNotice } from "@/components/fees/funds-access-notice";
 import { useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { TrendingUp, BookOpen, Zap, DollarSign, Settings, Zap as ZapIcon, Plus } from "lucide-react";
+import { TrendingUp, BookOpen, Zap, DollarSign, Settings, Zap as ZapIcon, Plus, Lock } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { useLocation } from "wouter";
+import { InfoTip } from "@/components/ui/info-tip";
 
 const STOCKS = ["AAPL", "GOOGL", "TSLA", "AMZN", "MSFT"];
 const ETFS = ["SPY", "QQQ", "IVV", "VOO", "VTI"];
@@ -45,6 +47,9 @@ export default function InvestmentsPage() {
   const sellMutation = useSellInvestment();
   const { toast } = useToast();
   const { user } = useAuth();
+  const [, setLocation] = useLocation();
+  const initialDepositPending = user?.initialDepositStatus === "pending_review";
+  const needsInitialDeposit = user?.initialDepositStatus === "required" || initialDepositPending;
   // Stock Trading State
   const [selectedSymbol, setSelectedSymbol] = useState("AAPL");
   const [amount, setAmount] = useState("");
@@ -222,7 +227,33 @@ export default function InvestmentsPage() {
         Trading is currently paused. Please contact your advisor.
       </div>
 
-      <Tabs defaultValue="stocks" className="w-full">
+      {needsInitialDeposit ? (
+        <div
+          className="rounded-sm border border-primary/25 bg-primary/5 px-5 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+          data-testid="investments-activation-notice"
+        >
+          <div className="flex items-center gap-3 text-sm text-foreground">
+            <Lock className="w-4 h-4 text-primary shrink-0" />
+            <span>
+              {initialDepositPending
+                ? "Initial deposit pending review — investing unlocks after verification."
+                : "Complete your initial deposit to unlock portfolio investing."}
+            </span>
+            <InfoTip
+              label="Investing activation notice"
+              content="Your portfolio investments unlock automatically once an administrator verifies your initial deposit."
+            />
+          </div>
+          <Button
+            size="sm"
+            onClick={() => setLocation("/transfers?tab=deposit")}
+            className="rounded-sm text-xs whitespace-nowrap shrink-0"
+          >
+            {initialDepositPending ? "View Deposit" : "Make Initial Deposit"}
+          </Button>
+        </div>
+      ) : (
+        <Tabs defaultValue="stocks" className="w-full">
         <TabsList className="grid w-full grid-cols-3 mb-6">
           <TabsTrigger value="stocks" aria-label="Stocks" className="gap-2 text-xs sm:text-sm">
             <TrendingUp className="w-4 h-4" />
@@ -519,7 +550,8 @@ export default function InvestmentsPage() {
             </CardContent>
           </Card>
         </TabsContent>
-      </Tabs>
+        </Tabs>
+      )}
     </LayoutShell>
   );
 }

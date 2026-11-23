@@ -37,6 +37,8 @@ export const users = pgTable("users", {
   accountFrozen: boolean("account_frozen").default(false),
   freezeReason: text("freeze_reason"),
   frozenAt: timestamp("frozen_at"),
+  initialDepositStatus: text("initial_deposit_status", { enum: ["required", "pending_review", "completed"] }).notNull().default("completed"),
+  selectedInitialDeposit: text("selected_initial_deposit"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

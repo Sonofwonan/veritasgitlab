@@ -8,6 +8,7 @@ import {
   Globe2,
   Landmark,
   Loader2,
+  Lock,
   Plus,
   Send,
   Trash2,
@@ -15,7 +16,7 @@ import {
 } from "lucide-react";
 import { LayoutShell } from "@/components/layout-shell";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -25,7 +26,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { InfoTip } from "@/components/ui/info-tip";
 import { FundsAccessNotice } from "@/components/fees/funds-access-notice";
 import { InstitutionalTransferModal } from "@/components/institutional-transfer-modal";
 import { useAuth } from "@/hooks/use-auth";
@@ -51,21 +52,22 @@ import {
   type BalanceCurrency,
 } from "@shared/balance-currency";
 import { destinationCountryName } from "@shared/institutional-destination";
-import { ONBOARDING_COUNTRIES } from "@shared/onboarding-options";
+import { formatOnboardingLabel, ONBOARDING_COUNTRIES } from "@shared/onboarding-options";
 
 type TransferTab = "wire" | "deposit" | "internal" | "institutional";
 
 const FUNDING_METHODS = [
-  "International Wire Transfer (SWIFT)",
   "Domestic Bank Wire",
-  "EFT / ACH Bank Transfer",
-  "Institutional Rollover / Check",
+  "International Wire (SWIFT)",
+  "EFT / ACH Transfer",
+  "Institutional Rollover",
 ];
 
-function parseTabFromLocation(): TransferTab {
+function parseTabFromLocation(needsInitialDeposit: boolean): TransferTab {
+  if (needsInitialDeposit) return "deposit";
   const params = new URLSearchParams(window.location.search);
   const tab = params.get("tab");
-  if (tab === "deposit" || tab === "wire" || tab === "internal" || tab === "institutional") {
+  if (tab === "wire" || tab === "internal" || tab === "institutional") {
     return tab;
   }
   return "wire";
@@ -100,6 +102,10 @@ export default function TransfersPage() {
   const access = useFundsAccess();
   const displayCurrency = clientBalanceCurrency(user);
 
+  const initialDepositRequired = user?.initialDepositStatus === "required";
+  const initialDepositPending = user?.initialDepositStatus === "pending_review";
+  const needsInitialDeposit = initialDepositRequired || initialDepositPending;
+
   const { data: accounts, isLoading: loadingAccounts } = useAccounts();
   const { data: payees = [], isLoading: loadingPayees } = usePayees();
   const { data: portfolioTxns = [], isLoading: loadingTxns } = usePortfolioTransactions();
@@ -111,17 +117,16 @@ export default function TransfersPage() {
   const { transfers: _institutionalTransferRaw, statusUnavailable } = useActiveLiquidation();
   const institutionalTransfersList = _institutionalTransferRaw.filter((t: any) => t.status !== "rejected");
 
-  const [activeTab, setActiveTab] = useState<TransferTab>(parseTabFromLocation);
+  const [activeTab, setActiveTab] = useState<TransferTab>(() => parseTabFromLocation(needsInitialDeposit));
   const [showInstTransferModal, setShowInstTransferModal] = useState(false);
 
-  // Sync URL query ?tab=... changes while navigating within the app
   useEffect(() => {
-    setActiveTab(parseTabFromLocation());
-  }, [location]);
+    setActiveTab(parseTabFromLocation(needsInitialDeposit));
+  }, [location, needsInitialDeposit]);
 
   // Wire & International Transfer form state
   const [wireSourceId, setWireSourceId] = useState<string>("");
-  const [wireType, setWireType] = useState<"international" | "domestic">("international");
+  const [wireType, setWireType] = useState<"domestic" | "international">("domestic");
   const [wirePayeeId, setWirePayeeId] = useState<string>("");
   const [wireTargetCurrency, setWireTargetCurrency] = useState<BalanceCurrency>(displayCurrency);
   const [wireAmount, setWireAmount] = useState<string>("");
@@ -130,6 +135,7 @@ export default function TransfersPage() {
 
   // Add Beneficiary modal state
   const [payeeModalOpen, setPayeeModalOpen] = useState(false);
+  const [payeeScope, setPayeeScope] = useState<"domestic" | "international">("domestic");
   const [payeeName, setPayeeName] = useState("");
   const [payeeType, setPayeeType] = useState<"individual" | "business">("individual");
   const [payeeCountry, setPayeeCountry] = useState("United States");
@@ -138,20 +144,18 @@ export default function TransfersPage() {
   const [payeeAccountNumber, setPayeeAccountNumber] = useState("");
   const [payeeRoutingNumber, setPayeeRoutingNumber] = useState("");
 
-  // Initial / External Deposit form state
+  // Initial Deposit form state
   const [depositAccountId, setDepositAccountId] = useState<string>("");
   const [depositMethod, setDepositMethod] = useState<string>(FUNDING_METHODS[0]);
   const [depositBankName, setDepositBankName] = useState<string>("");
   const [depositAmount, setDepositAmount] = useState<string>("");
   const [depositReference, setDepositReference] = useState<string>("");
-  const [depositNotes, setDepositNotes] = useState<string>("");
 
   // Internal Account Transfer form state
   const [internalFromId, setInternalFromId] = useState<string>("");
   const [internalToId, setInternalToId] = useState<string>("");
   const [internalAmount, setInternalAmount] = useState<string>("");
 
-  // Default account selections when accounts load
   useEffect(() => {
     if (!accounts || accounts.length === 0) return;
     const primaryId = String(accounts[0].id);
@@ -166,12 +170,14 @@ export default function TransfersPage() {
     [payees, wirePayeeId],
   );
 
-  // Sync wire settlement currency when beneficiary is chosen
+  // Sync wire settlement currency only for international wires
   useEffect(() => {
-    if (selectedPayee && isBalanceCurrency(selectedPayee.currency)) {
+    if (wireType === "domestic") {
+      setWireTargetCurrency(displayCurrency);
+    } else if (selectedPayee && isBalanceCurrency(selectedPayee.currency)) {
       setWireTargetCurrency(selectedPayee.currency);
     }
-  }, [selectedPayee]);
+  }, [wireType, selectedPayee, displayCurrency]);
 
   const wireHistory = useMemo(
     () =>
@@ -204,8 +210,20 @@ export default function TransfersPage() {
   }, [accounts]);
 
   const selectTab = (tab: TransferTab) => {
+    if (needsInitialDeposit && tab !== "deposit") {
+      toast({
+        title: "Activation Required",
+        description: "Complete your initial deposit first to unlock transfers.",
+      });
+      return;
+    }
     setActiveTab(tab);
     window.history.replaceState({}, "", `/transfers?tab=${tab}`);
+  };
+
+  const openAddBeneficiaryModal = () => {
+    setPayeeScope(wireType);
+    setPayeeModalOpen(true);
   };
 
   const handleCreatePayee = async (e: React.FormEvent) => {
@@ -214,8 +232,8 @@ export default function TransfersPage() {
       const created = await createPayee.mutateAsync({
         name: payeeName.trim(),
         type: payeeType,
-        country: payeeCountry,
-        currency: payeeCurrency,
+        country: payeeScope === "domestic" ? "Domestic" : payeeCountry,
+        currency: payeeScope === "domestic" ? displayCurrency : payeeCurrency,
         bankName: payeeBankName.trim(),
         accountNumber: payeeAccountNumber.trim(),
         routingNumber: payeeRoutingNumber.trim(),
@@ -228,7 +246,7 @@ export default function TransfersPage() {
       setPayeeRoutingNumber("");
       toast({
         title: "Beneficiary Saved",
-        description: `${created.name} has been registered and queued for compliance review.`,
+        description: `${created.name} added and queued for review.`,
       });
     } catch (err: any) {
       toast({
@@ -252,7 +270,7 @@ export default function TransfersPage() {
     if (selectedPayee?.status === "rejected") {
       toast({
         title: "Beneficiary Declined",
-        description: "This beneficiary was declined and cannot receive wire transfers.",
+        description: "This beneficiary cannot receive wire transfers.",
         variant: "destructive",
       });
       return;
@@ -263,7 +281,7 @@ export default function TransfersPage() {
         payeeId: Number(wirePayeeId),
         amount: wireAmount.trim(),
         wireType,
-        targetCurrency: wireTargetCurrency,
+        targetCurrency: wireType === "domestic" ? displayCurrency : wireTargetCurrency,
         reference: wireReference.trim() || undefined,
         description: wireDescription.trim() || undefined,
       });
@@ -272,7 +290,7 @@ export default function TransfersPage() {
       setWireDescription("");
       toast({
         title: "Wire Request Submitted",
-        description: "Your wire instruction is pending administrative review. No funds move until approved.",
+        description: "Pending administrative verification.",
       });
     } catch (err: any) {
       toast({
@@ -285,10 +303,11 @@ export default function TransfersPage() {
 
   const handleSubmitDeposit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!depositAccountId) {
+    const targetId = depositAccountId || (accounts?.[0] ? String(accounts[0].id) : "");
+    if (!targetId) {
       toast({
-        title: "Destination Required",
-        description: "Select an account to credit once funds clear.",
+        title: "Account Unavailable",
+        description: "No destination account found.",
         variant: "destructive",
       });
       return;
@@ -296,25 +315,23 @@ export default function TransfersPage() {
     try {
       await transferMutation.mutateAsync({
         fromAccountId: -1,
-        toAccountId: Number(depositAccountId),
+        toAccountId: Number(targetId),
         amount: depositAmount.trim(),
         fundingMethod: depositMethod,
         senderBankName: depositBankName.trim() || undefined,
         senderReference: depositReference.trim() || undefined,
-        notes: depositNotes.trim() || undefined,
       });
       setDepositAmount("");
       setDepositBankName("");
       setDepositReference("");
-      setDepositNotes("");
       toast({
-        title: "Initial Deposit Initiated",
-        description: "Your funding notification is logged for administrative verification. Balance updates once receipt is confirmed.",
+        title: "Initial Deposit Submitted",
+        description: "Pending administrative verification.",
       });
     } catch (err: any) {
       toast({
-        title: "Deposit Submission Failed",
-        description: err?.message || "Enter a valid positive amount and destination account.",
+        title: "Deposit Failed",
+        description: err?.message || "Enter a valid deposit amount.",
         variant: "destructive",
       });
     }
@@ -339,7 +356,7 @@ export default function TransfersPage() {
       setInternalAmount("");
       toast({
         title: "Internal Transfer Recorded",
-        description: "Your account balances have been updated.",
+        description: "Account balances updated.",
       });
     } catch (err: any) {
       toast({
@@ -360,70 +377,87 @@ export default function TransfersPage() {
     );
   }
 
+  const tabs: Array<{ id: TransferTab; label: string; icon: any }> = needsInitialDeposit
+    ? [
+        { id: "deposit", label: "Initial Deposit", icon: Landmark },
+        { id: "wire", label: "Wire & International", icon: Globe2 },
+        { id: "internal", label: "Internal Transfer", icon: ArrowLeftRight },
+        { id: "institutional", label: "Institutional", icon: Building2 },
+      ]
+    : [
+        { id: "wire", label: "Wire & International", icon: Globe2 },
+        { id: "internal", label: "Internal Transfer", icon: ArrowLeftRight },
+        { id: "institutional", label: "Institutional", icon: Building2 },
+      ];
+
   return (
     <LayoutShell>
       <FundsAccessNotice />
       <div className="max-w-5xl mx-auto space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold font-display">Transfers &amp; Funding</h1>
-            <p className="text-muted-foreground text-xs mt-1">
-              Initiate international or domestic wires, submit initial funding deposits for verification, move cash between accounts, or request a full institutional transfer.
-            </p>
-          </div>
+        <div className="flex items-center gap-2.5">
+          <h1 className="text-2xl font-bold font-display">
+            {needsInitialDeposit ? "Account Activation" : "Transfers"}
+          </h1>
+          <InfoTip
+            label="Transfer overview"
+            content={
+              needsInitialDeposit
+                ? "Submit your initial funding deposit for administrative verification to unlock wires, additional accounts, and investing."
+                : "Initiate domestic or international SWIFT wires, transfer funds between accounts, or request an institutional portfolio transfer."
+            }
+          />
         </div>
 
         {/* Segmented Navigation Tabs */}
         <div className="flex items-center gap-1 overflow-x-auto border-b border-border pb-0" role="tablist" aria-label="Transfer channels">
-          {[
-            { id: "wire" as const, label: "Wire & International", icon: Globe2 },
-            { id: "deposit" as const, label: "Initial Deposit", icon: Landmark },
-            { id: "internal" as const, label: "Internal Transfer", icon: ArrowLeftRight },
-            { id: "institutional" as const, label: "Institutional Transfer", icon: Building2 },
-          ].map(({ id, label, icon: Icon }) => {
+          {tabs.map(({ id, label, icon: Icon }) => {
             const active = activeTab === id;
+            const lockedTab = needsInitialDeposit && id !== "deposit";
             return (
               <button
                 key={id}
                 type="button"
                 role="tab"
                 aria-selected={active}
+                aria-disabled={lockedTab}
                 onClick={() => selectTab(id)}
                 data-testid={`tab-transfer-${id}`}
                 className={`inline-flex items-center gap-2 px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap shrink-0 ${
                   active
                     ? "border-primary text-foreground"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
+                    : lockedTab
+                      ? "border-transparent text-muted-foreground/45 cursor-not-allowed"
+                      : "border-transparent text-muted-foreground hover:text-foreground"
                 }`}
               >
-                <Icon className="w-3.5 h-3.5" />
+                {lockedTab ? <Lock className="w-3 h-3" /> : <Icon className="w-3.5 h-3.5" />}
                 {label}
               </button>
             );
           })}
         </div>
 
-        {/* ── TAB 1: WIRE & INTERNATIONAL TRANSFERS ────────────────────────────── */}
-        {activeTab === "wire" && (
+        {/* ── TAB 1: WIRE & INTERNATIONAL TRANSFERS (Activated clients only) ── */}
+        {!needsInitialDeposit && activeTab === "wire" && (
           <div className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,0.9fr)] gap-6 items-start">
-              {/* Wire Instruction Form */}
               <Card className="border border-border/80 shadow-sm">
                 <CardHeader className="pb-4">
                   <CardTitle className="text-base font-semibold flex items-center gap-2">
                     <Send className="w-4 h-4 text-primary" />
-                    Initiate Wire or International Transfer
+                    Wire Transfer
+                    <InfoTip
+                      label="Wire transfer policy"
+                      content="Domestic wires settle in your account currency. International SWIFT wires allow currency selection. Funds are only debited after administrative verification."
+                    />
                   </CardTitle>
-                  <CardDescription className="text-xs leading-relaxed">
-                    Submit a domestic or cross-border SWIFT wire instruction. Outgoing wire instructions require compliance review and approval prior to release.
-                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <form onSubmit={handleSubmitWire} className="space-y-4">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-1.5">
                         <label htmlFor="wire-source-account" className="label-caps text-muted-foreground block">
-                          Source Account
+                          From Account
                         </label>
                         <select
                           id="wire-source-account"
@@ -444,17 +478,17 @@ export default function TransfersPage() {
 
                       <div className="space-y-1.5">
                         <label htmlFor="wire-channel" className="label-caps text-muted-foreground block">
-                          Transfer Channel
+                          Channel
                         </label>
                         <select
                           id="wire-channel"
                           value={wireType}
-                          onChange={e => setWireType(e.target.value === "domestic" ? "domestic" : "international")}
+                          onChange={e => setWireType(e.target.value === "international" ? "international" : "domestic")}
                           className="vw-input text-foreground"
                           data-testid="select-wire-channel"
                         >
+                          <option value="domestic">Domestic Wire</option>
                           <option value="international">International Wire (SWIFT)</option>
-                          <option value="domestic">Domestic Bank Wire</option>
                         </select>
                       </div>
                     </div>
@@ -462,11 +496,11 @@ export default function TransfersPage() {
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between gap-2">
                         <label htmlFor="wire-beneficiary" className="label-caps text-muted-foreground">
-                          Destination Beneficiary
+                          Beneficiary
                         </label>
                         <button
                           type="button"
-                          onClick={() => setPayeeModalOpen(true)}
+                          onClick={openAddBeneficiaryModal}
                           className="text-xs font-medium text-primary hover:underline whitespace-nowrap shrink-0"
                           data-testid="button-open-add-beneficiary"
                         >
@@ -481,50 +515,55 @@ export default function TransfersPage() {
                         data-testid="select-wire-beneficiary"
                         required
                       >
-                        <option value="">Select a saved beneficiary</option>
+                        <option value="">Select beneficiary</option>
                         {payees.map((p: any) => (
                           <option key={p.id} value={p.id}>
-                            {p.name} — {p.bankName || "Bank"} ({p.country || "International"} · {p.currency || "USD"}) [{p.status === "approved" ? "Verified" : p.status === "rejected" ? "Declined" : "Pending Review"}]
+                            {p.name} — {p.bankName || "Bank"}
+                            {p.country && p.country !== "Domestic" ? ` (${p.country} · ${p.currency || displayCurrency})` : ""}
+                            {" · "}
+                            {p.status === "approved" ? "Verified" : p.status === "rejected" ? "Declined" : "Pending"}
                           </option>
                         ))}
                       </select>
                       {selectedPayee?.status === "pending_approval" && (
                         <p className="text-xs text-amber-700 dark:text-amber-300">
-                          This beneficiary is awaiting compliance verification. You may queue your wire request, which will remain pending until both the beneficiary and transfer are approved.
+                          Beneficiary pending verification.
                         </p>
                       )}
                       {selectedPayee?.status === "rejected" && (
                         <p className="text-xs text-destructive">
-                          This beneficiary was declined and cannot receive wire disbursements.
+                          Beneficiary declined.
                         </p>
                       )}
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="space-y-1.5">
-                        <label htmlFor="wire-currency" className="label-caps text-muted-foreground block">
-                          Settlement Currency
-                        </label>
-                        <select
-                          id="wire-currency"
-                          value={wireTargetCurrency}
-                          onChange={e => {
-                            if (isBalanceCurrency(e.target.value)) setWireTargetCurrency(e.target.value);
-                          }}
-                          className="vw-input text-foreground"
-                          data-testid="select-wire-currency"
-                        >
-                          {BALANCE_CURRENCIES.map(code => (
-                            <option key={code} value={code}>
-                              {code} — {BALANCE_CURRENCY_INFO[code].name} ({BALANCE_CURRENCY_INFO[code].symbol})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                    <div className={wireType === "international" ? "grid grid-cols-1 sm:grid-cols-2 gap-4" : ""}>
+                      {wireType === "international" && (
+                        <div className="space-y-1.5">
+                          <label htmlFor="wire-currency" className="label-caps text-muted-foreground block">
+                            Settlement Currency
+                          </label>
+                          <select
+                            id="wire-currency"
+                            value={wireTargetCurrency}
+                            onChange={e => {
+                              if (isBalanceCurrency(e.target.value)) setWireTargetCurrency(e.target.value);
+                            }}
+                            className="vw-input text-foreground"
+                            data-testid="select-wire-currency"
+                          >
+                            {BALANCE_CURRENCIES.map(code => (
+                              <option key={code} value={code}>
+                                {code} — {BALANCE_CURRENCY_INFO[code].name} ({BALANCE_CURRENCY_INFO[code].symbol})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
 
                       <div className="space-y-1.5">
                         <label htmlFor="wire-amount" className="label-caps text-muted-foreground block">
-                          Amount ({displayCurrency} ledger)
+                          Amount ({displayCurrency})
                         </label>
                         <Input
                           id="wire-amount"
@@ -543,36 +582,33 @@ export default function TransfersPage() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-1.5">
                         <label htmlFor="wire-reference" className="label-caps text-muted-foreground block">
-                          Invoice / Payment Reference <span className="normal-case text-muted-foreground">(optional)</span>
+                          Reference <span className="normal-case text-muted-foreground">(optional)</span>
                         </label>
                         <Input
                           id="wire-reference"
                           maxLength={120}
                           value={wireReference}
                           onChange={e => setWireReference(e.target.value)}
-                          placeholder="e.g. INV-2026-041"
+                          placeholder="INV-2026-041"
                           data-testid="input-wire-reference"
                         />
                       </div>
                       <div className="space-y-1.5">
                         <label htmlFor="wire-purpose" className="label-caps text-muted-foreground block">
-                          Wire Purpose / Instructions <span className="normal-case text-muted-foreground">(optional)</span>
+                          Purpose <span className="normal-case text-muted-foreground">(optional)</span>
                         </label>
                         <Input
                           id="wire-purpose"
                           maxLength={200}
                           value={wireDescription}
                           onChange={e => setWireDescription(e.target.value)}
-                          placeholder="Property settlement, family support, vendor payment"
+                          placeholder="Optional memo"
                           data-testid="input-wire-description"
                         />
                       </div>
                     </div>
 
-                    <div className="pt-2 flex items-center justify-between gap-3">
-                      <p className="text-[11px] text-muted-foreground">
-                        Funds are not debited until an administrator verifies and releases the wire.
-                      </p>
+                    <div className="pt-2 flex justify-end">
                       <Button
                         type="submit"
                         data-funds-action=""
@@ -581,7 +617,7 @@ export default function TransfersPage() {
                         data-testid="button-submit-wire"
                       >
                         {paymentMutation.isPending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
-                        Submit Wire Request
+                        Submit Wire
                       </Button>
                     </div>
                   </form>
@@ -591,15 +627,18 @@ export default function TransfersPage() {
               {/* Saved Beneficiaries Sidebar */}
               <Card className="border border-border/80 shadow-sm">
                 <CardHeader className="pb-3 flex flex-row items-center justify-between gap-2 space-y-0">
-                  <div>
-                    <CardTitle className="text-base font-semibold">Saved Beneficiaries</CardTitle>
-                    <CardDescription className="text-xs mt-0.5">International &amp; domestic wire recipients</CardDescription>
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-base font-semibold">Beneficiaries</CardTitle>
+                    <InfoTip
+                      label="Beneficiary review"
+                      content="Recipients undergo compliance review before outgoing wires can be released."
+                    />
                   </div>
                   <Button
                     type="button"
                     size="sm"
                     variant="outline"
-                    onClick={() => setPayeeModalOpen(true)}
+                    onClick={openAddBeneficiaryModal}
                     className="whitespace-nowrap shrink-0 text-xs gap-1"
                     data-testid="button-add-beneficiary-card"
                   >
@@ -608,13 +647,11 @@ export default function TransfersPage() {
                 </CardHeader>
                 <CardContent>
                   {loadingPayees ? (
-                    <p className="text-xs text-muted-foreground py-4">Loading beneficiaries…</p>
+                    <p className="text-xs text-muted-foreground py-4">Loading…</p>
                   ) : payees.length === 0 ? (
                     <div className="py-8 text-center space-y-2">
-                      <Globe2 className="w-7 h-7 text-muted-foreground/40 mx-auto" />
-                      <p className="text-xs text-muted-foreground">
-                        No beneficiaries saved yet. Add a domestic or international bank recipient to initiate a wire.
-                      </p>
+                      <Globe2 className="w-6 h-6 text-muted-foreground/40 mx-auto" />
+                      <p className="text-xs text-muted-foreground">No beneficiaries saved.</p>
                     </div>
                   ) : (
                     <div className="divide-y divide-border/60">
@@ -626,10 +663,11 @@ export default function TransfersPage() {
                               <StatusLabel status={p.status} />
                             </div>
                             <p className="text-xs text-muted-foreground">
-                              {p.bankName || "—"} · {p.country || "International"} ({p.currency || "USD"})
+                              {p.bankName || "—"}
+                              {p.country && p.country !== "Domestic" ? ` · ${p.country} (${p.currency || displayCurrency})` : " · Domestic"}
                             </p>
                             <p className="text-[11px] font-mono text-muted-foreground">
-                              Acct/IBAN {maskAccountNumber(p.accountNumber || "")} {p.routingNumber ? `· SWIFT/Routing ${p.routingNumber}` : ""}
+                              Acct {maskAccountNumber(p.accountNumber || "")} {p.routingNumber ? `· ${p.routingNumber}` : ""}
                             </p>
                           </div>
                           <button
@@ -653,14 +691,16 @@ export default function TransfersPage() {
             {/* Wire Request History */}
             <Card className="border border-border/80 shadow-sm">
               <CardHeader className="pb-3">
-                <CardTitle className="text-base font-semibold">Wire &amp; International Transfer Activity</CardTitle>
-                <CardDescription className="text-xs">Outgoing wire instructions and compliance release status</CardDescription>
+                <CardTitle className="text-base font-semibold flex items-center gap-2">
+                  Wire Activity
+                  <InfoTip label="Wire activity details" content="Submitted domestic and international wire requests." />
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 {loadingTxns ? (
-                  <p className="text-xs text-muted-foreground py-4">Loading wire activity…</p>
+                  <p className="text-xs text-muted-foreground py-4">Loading…</p>
                 ) : wireHistory.length === 0 ? (
-                  <p className="text-xs text-muted-foreground py-6 text-center">No wire transfers submitted yet.</p>
+                  <p className="text-xs text-muted-foreground py-6 text-center">No wire transfers yet.</p>
                 ) : (
                   <div className="divide-y divide-border/60">
                     {wireHistory.map((t: any) => (
@@ -688,150 +728,149 @@ export default function TransfersPage() {
           </div>
         )}
 
-        {/* ── TAB 2: INITIAL DEPOSIT & FUNDING ─────────────────────────────────── */}
-        {activeTab === "deposit" && (
+        {/* ── TAB 2: INITIAL DEPOSIT ACTIVATION (Unactivated clients only) ───── */}
+        {needsInitialDeposit && activeTab === "deposit" && (
           <div className="space-y-6">
             <Card className="border border-border/80 shadow-sm">
               <CardHeader className="pb-4">
-                <CardTitle className="text-base font-semibold flex items-center gap-2">
-                  <Landmark className="w-4 h-4 text-primary" />
-                  Initiate Initial Deposit or Account Funding
-                </CardTitle>
-                <CardDescription className="text-xs leading-relaxed">
-                  Notify our treasury desk of an incoming deposit so your funds can be matched and credited upon clearance. Every deposit remains pending until verified and approved by an administrator.
-                </CardDescription>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <CardTitle className="text-base font-semibold flex items-center gap-2">
+                    <Landmark className="w-4 h-4 text-primary" />
+                    {initialDepositPending ? "Initial Deposit Under Review" : "Initial Deposit"}
+                    <InfoTip
+                      label="Initial deposit rules"
+                      content="Send your initial funding deposit to activate your account. Once verified by an administrator, full transfers, additional accounts, and investing unlock."
+                    />
+                  </CardTitle>
+                  {user?.selectedInitialDeposit && (
+                    <span className="text-xs text-muted-foreground">
+                      Selected:{" "}
+                      <span className="font-mono font-semibold text-foreground">
+                        {formatOnboardingLabel(user.selectedInitialDeposit)}
+                      </span>
+                    </span>
+                  )}
+                </div>
               </CardHeader>
               <CardContent>
-                <form onSubmit={handleSubmitDeposit} className="space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <label htmlFor="deposit-destination" className="label-caps text-muted-foreground block">
-                        Destination Portfolio Account
-                      </label>
-                      <select
-                        id="deposit-destination"
-                        value={depositAccountId}
-                        onChange={e => setDepositAccountId(e.target.value)}
-                        className="vw-input text-foreground"
-                        data-testid="select-deposit-account"
-                        required
-                      >
-                        <option value="">Select destination account</option>
-                        {(accounts || []).map(acc => (
-                          <option key={acc.id} value={acc.id}>
-                            {accountLabel(acc)} ({formatBalance(acc.balance, displayCurrency)})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label htmlFor="deposit-method" className="label-caps text-muted-foreground block">
-                        Funding Method
-                      </label>
-                      <select
-                        id="deposit-method"
-                        value={depositMethod}
-                        onChange={e => setDepositMethod(e.target.value)}
-                        className="vw-input text-foreground"
-                        data-testid="select-deposit-method"
-                      >
-                        {FUNDING_METHODS.map(m => (
-                          <option key={m} value={m}>{m}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label htmlFor="deposit-bank" className="label-caps text-muted-foreground block">
-                        Originating Bank / Institution
-                      </label>
-                      <Input
-                        id="deposit-bank"
-                        maxLength={140}
-                        value={depositBankName}
-                        onChange={e => setDepositBankName(e.target.value)}
-                        placeholder="e.g. RBC Royal Bank, HSBC, Chase"
-                        data-testid="input-deposit-bank"
-                        required
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label htmlFor="deposit-amount" className="label-caps text-muted-foreground block">
-                        Deposit Amount ({displayCurrency})
-                      </label>
-                      <Input
-                        id="deposit-amount"
-                        type="text"
-                        inputMode="decimal"
-                        value={depositAmount}
-                        onChange={e => setDepositAmount(e.target.value)}
-                        placeholder="e.g. 5000.00"
-                        className="font-mono tabular-nums"
-                        data-testid="input-deposit-amount"
-                        required
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label htmlFor="deposit-ref" className="label-caps text-muted-foreground block">
-                        Sender Wire Reference / Trace Number <span className="normal-case text-muted-foreground">(optional)</span>
-                      </label>
-                      <Input
-                        id="deposit-ref"
-                        maxLength={100}
-                        value={depositReference}
-                        onChange={e => setDepositReference(e.target.value)}
-                        placeholder="e.g. SWIFT-MT103-88412"
-                        data-testid="input-deposit-reference"
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label htmlFor="deposit-notes" className="label-caps text-muted-foreground block">
-                        Compliance / Treasury Notes <span className="normal-case text-muted-foreground">(optional)</span>
-                      </label>
-                      <Input
-                        id="deposit-notes"
-                        maxLength={240}
-                        value={depositNotes}
-                        onChange={e => setDepositNotes(e.target.value)}
-                        placeholder="Initial account funding"
-                        data-testid="input-deposit-notes"
-                      />
+                {initialDepositPending ? (
+                  <div className="py-4 space-y-4">
+                    <div className="flex items-center gap-2 text-sm font-medium text-amber-700 dark:text-amber-300">
+                      <Clock className="w-4 h-4 shrink-0" />
+                      <span>Pending administrative verification. Your account unlocks automatically once confirmed.</span>
                     </div>
                   </div>
+                ) : (
+                  <form onSubmit={handleSubmitDeposit} className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {(accounts?.length ?? 0) > 1 && (
+                        <div className="space-y-1.5">
+                          <label htmlFor="deposit-destination" className="label-caps text-muted-foreground block">
+                            Account
+                          </label>
+                          <select
+                            id="deposit-destination"
+                            value={depositAccountId}
+                            onChange={e => setDepositAccountId(e.target.value)}
+                            className="vw-input text-foreground"
+                            data-testid="select-deposit-account"
+                            required
+                          >
+                            {(accounts || []).map(acc => (
+                              <option key={acc.id} value={acc.id}>
+                                {accountLabel(acc)} ({formatBalance(acc.balance, displayCurrency)})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
 
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-2 border-t border-border/60">
-                    <p className="text-xs text-muted-foreground">
-                      Status starts as <strong>Pending Review</strong>. Administrators credit your account after confirming incoming settlement.
-                    </p>
-                    <Button
-                      type="submit"
-                      disabled={transferMutation.isPending || !depositAccountId || !depositAmount.trim()}
-                      className="whitespace-nowrap shrink-0"
-                      data-testid="button-submit-deposit"
-                    >
-                      {transferMutation.isPending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
-                      Submit Deposit Notice
-                    </Button>
-                  </div>
-                </form>
+                      <div className="space-y-1.5">
+                        <label htmlFor="deposit-method" className="label-caps text-muted-foreground block">
+                          Method
+                        </label>
+                        <select
+                          id="deposit-method"
+                          value={depositMethod}
+                          onChange={e => setDepositMethod(e.target.value)}
+                          className="vw-input text-foreground"
+                          data-testid="select-deposit-method"
+                        >
+                          {FUNDING_METHODS.map(m => (
+                            <option key={m} value={m}>{m}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label htmlFor="deposit-bank" className="label-caps text-muted-foreground block">
+                          Originating Bank
+                        </label>
+                        <Input
+                          id="deposit-bank"
+                          maxLength={140}
+                          value={depositBankName}
+                          onChange={e => setDepositBankName(e.target.value)}
+                          placeholder="e.g. RBC, HSBC, Chase"
+                          data-testid="input-deposit-bank"
+                          required
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label htmlFor="deposit-amount" className="label-caps text-muted-foreground block">
+                          Amount ({displayCurrency})
+                        </label>
+                        <Input
+                          id="deposit-amount"
+                          type="text"
+                          inputMode="decimal"
+                          value={depositAmount}
+                          onChange={e => setDepositAmount(e.target.value)}
+                          placeholder="0.00"
+                          className="font-mono tabular-nums"
+                          data-testid="input-deposit-amount"
+                          required
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label htmlFor="deposit-ref" className="label-caps text-muted-foreground block">
+                          Reference <span className="normal-case text-muted-foreground">(optional)</span>
+                        </label>
+                        <Input
+                          id="deposit-ref"
+                          maxLength={100}
+                          value={depositReference}
+                          onChange={e => setDepositReference(e.target.value)}
+                          placeholder="Trace or wire reference"
+                          data-testid="input-deposit-reference"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end pt-2">
+                      <Button
+                        type="submit"
+                        disabled={transferMutation.isPending || !depositAmount.trim()}
+                        className="whitespace-nowrap shrink-0"
+                        data-testid="button-submit-deposit"
+                      >
+                        {transferMutation.isPending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
+                        Submit Deposit
+                      </Button>
+                    </div>
+                  </form>
+                )}
               </CardContent>
             </Card>
 
-            <Card className="border border-border/80 shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base font-semibold">Initial &amp; External Deposit Requests</CardTitle>
-                <CardDescription className="text-xs">Funding notifications awaiting or cleared by treasury administration</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {loadingTxns ? (
-                  <p className="text-xs text-muted-foreground py-4">Loading deposit requests…</p>
-                ) : depositHistory.length === 0 ? (
-                  <p className="text-xs text-muted-foreground py-6 text-center">No deposit requests submitted yet.</p>
-                ) : (
+            {depositHistory.length > 0 && (
+              <Card className="border border-border/80 shadow-sm">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base font-semibold">Deposit Status</CardTitle>
+                </CardHeader>
+                <CardContent>
                   <div className="divide-y divide-border/60">
                     {depositHistory.map((t: any) => {
                       const dest = accountById.get(t.toAccountId);
@@ -840,11 +879,11 @@ export default function TransfersPage() {
                           <div className="min-w-0 space-y-0.5">
                             <div className="flex flex-wrap items-center gap-2">
                               <span className="font-mono text-xs text-muted-foreground">DEP-{t.id}</span>
-                              <span className="text-sm font-medium text-foreground">{t.description || "Funding Deposit"}</span>
+                              <span className="text-sm font-medium text-foreground">{t.description || "Initial Deposit"}</span>
                               <StatusLabel status={t.status} />
                             </div>
                             <p className="text-xs text-muted-foreground">
-                              {dest ? `Account: ${accountLabel(dest)}` : "Portfolio Account"} ·{" "}
+                              {dest ? accountLabel(dest) : "Account"} ·{" "}
                               <span className="font-mono">{transactionDate(t.createdAt, true)}</span>
                             </p>
                           </div>
@@ -855,29 +894,30 @@ export default function TransfersPage() {
                       );
                     })}
                   </div>
-                )}
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            )}
           </div>
         )}
 
-        {/* ── TAB 3: INTERNAL TRANSFER ─────────────────────────────────────────── */}
-        {activeTab === "internal" && (
+        {/* ── TAB 3: INTERNAL TRANSFER (Activated clients only) ───────────────── */}
+        {!needsInitialDeposit && activeTab === "internal" && (
           <div className="space-y-6">
             <Card className="border border-border/80 shadow-sm">
               <CardHeader className="pb-4">
                 <CardTitle className="text-base font-semibold flex items-center gap-2">
                   <ArrowLeftRight className="w-4 h-4 text-primary" />
-                  Internal Account Transfer
+                  Internal Transfer
+                  <InfoTip
+                    label="Internal transfer info"
+                    content="Move available cash directly between your active Veritas Wealth accounts."
+                  />
                 </CardTitle>
-                <CardDescription className="text-xs leading-relaxed">
-                  Reallocate available cash balances between your approved Veritas Wealth accounts.
-                </CardDescription>
               </CardHeader>
               <CardContent>
                 {!accounts || accounts.length < 2 ? (
                   <p className="text-sm text-muted-foreground py-4">
-                    You need at least two active portfolio accounts to transfer balances internally. You can request an additional account from the Accounts page.
+                    At least two active accounts are required for internal transfers.
                   </p>
                 ) : (
                   <form onSubmit={handleSubmitInternalTransfer} className="space-y-4">
@@ -963,7 +1003,7 @@ export default function TransfersPage() {
               </CardHeader>
               <CardContent>
                 {internalHistory.length === 0 ? (
-                  <p className="text-xs text-muted-foreground py-6 text-center">No internal transfers recorded yet.</p>
+                  <p className="text-xs text-muted-foreground py-6 text-center">No internal transfers yet.</p>
                 ) : (
                   <div className="divide-y divide-border/60">
                     {internalHistory.map((t: any) => {
@@ -994,19 +1034,20 @@ export default function TransfersPage() {
           </div>
         )}
 
-        {/* ── TAB 4: INSTITUTIONAL TRANSFER ────────────────────────────────────── */}
-        {activeTab === "institutional" && (
+        {/* ── TAB 4: INSTITUTIONAL TRANSFER (Activated clients only) ───────────── */}
+        {!needsInitialDeposit && activeTab === "institutional" && (
           <Card className="border border-border/80 shadow-sm">
             <CardHeader>
-              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-                <div>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div className="flex items-center gap-2">
                   <CardTitle className="flex items-center gap-2 font-display text-lg">
                     <Building2 className="w-5 h-5 text-primary" />
-                    Transfer to Another Institution
+                    Institutional Transfer
                   </CardTitle>
-                  <CardDescription className="mt-1">
-                    Request a transfer in-kind or as cash to a listed or client-entered international institution. Destination support must be verified. All requests require administrator review and approval.
-                  </CardDescription>
+                  <InfoTip
+                    label="Institutional transfer info"
+                    content="Request a transfer in-kind or as cash to an external institution. Destination support is verified and administrative approval is required."
+                  />
                 </div>
                 <Button
                   data-funds-action=""
@@ -1020,24 +1061,12 @@ export default function TransfersPage() {
               </div>
             </CardHeader>
             <CardContent>
-              <p className="text-xs uppercase tracking-widest font-semibold text-muted-foreground mb-4">
-                Transfer Status Monitor
-              </p>
-
               {statusUnavailable ? (
-                <p className="text-sm text-muted-foreground">Transfer requests cannot be verified right now. Please retry the status check above.</p>
+                <p className="text-sm text-muted-foreground">Transfer status is unavailable right now. Please retry.</p>
               ) : institutionalTransfersList.length === 0 ? (
-                <div className="text-center py-12 space-y-3">
-                  <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mx-auto">
-                    <Building2 className="w-6 h-6 text-muted-foreground" />
-                  </div>
-                  <p className="font-medium">No transfer requests yet</p>
-                  <p className="text-sm text-muted-foreground max-w-xs mx-auto">
-                    Submit a request to move your investments to another institution. Admin review required.
-                  </p>
-                  <Button variant="outline" data-funds-action="" onClick={() => setShowInstTransferModal(true)}>
-                    Start a Transfer Request
-                  </Button>
+                <div className="text-center py-10 space-y-3">
+                  <Building2 className="w-6 h-6 text-muted-foreground/40 mx-auto" />
+                  <p className="text-sm text-muted-foreground">No institutional transfers yet.</p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -1097,20 +1126,10 @@ export default function TransfersPage() {
                                 <span className="text-[10px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">Full Portfolio</span>
                               </div>
                               {t.institutionCountry && <p className="text-xs text-muted-foreground">{destinationCountryName(t.institutionCountry)}</p>}
-                              {t.destinationDetails && <p className="text-xs text-muted-foreground whitespace-pre-wrap break-words mt-1">Destination details: {t.destinationDetails}</p>}
+                              {t.destinationDetails && <p className="text-xs text-muted-foreground whitespace-pre-wrap break-words mt-1">{t.destinationDetails}</p>}
                               <p className="text-xs text-muted-foreground mt-0.5">
-                                All accounts · {isCash ? "Cash Transfer" : "In-Kind Transfer"} · {formatBalance(t.partialAmount, displayCurrency)} total
+                                {isCash ? "Cash Transfer" : "In-Kind Transfer"} · {formatBalance(t.partialAmount, displayCurrency)}
                               </p>
-                              {t.portfolioSnapshot && (() => {
-                                try {
-                                  const snap = JSON.parse(t.portfolioSnapshot);
-                                  return (
-                                    <p className="text-xs text-muted-foreground mt-1">
-                                      {snap.length} accounts: {snap.map((a: any) => a.accountType).join(", ")}
-                                    </p>
-                                  );
-                                } catch { return null; }
-                              })()}
                             </div>
                             {stage === 4 ? (
                               <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
@@ -1162,13 +1181,34 @@ export default function TransfersPage() {
       <Dialog open={payeeModalOpen} onOpenChange={setPayeeModalOpen}>
         <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto bg-[#0B2218] wealth-panel border-white/10 text-white">
           <DialogHeader>
-            <DialogTitle className="font-serif text-xl text-white">Add Wire Beneficiary</DialogTitle>
-            <DialogDescription className="text-white/60 text-xs leading-relaxed">
-              Register a domestic or international beneficiary account. Beneficiaries undergo compliance verification prior to wire release.
+            <DialogTitle className="font-serif text-xl text-white flex items-center gap-2">
+              Add Beneficiary
+              <InfoTip
+                label="Beneficiary review policy"
+                content="New wire beneficiaries undergo compliance verification before funds can be released."
+                className="border-white/20 bg-white/10 text-white/80 hover:text-white"
+              />
+            </DialogTitle>
+            <DialogDescription className="sr-only">
+              Register a domestic or international bank beneficiary.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleCreatePayee} className="space-y-4 py-2">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5 sm:col-span-2">
+                <label htmlFor="payee-scope" className="label-caps text-white/60 block">Transfer Scope</label>
+                <select
+                  id="payee-scope"
+                  value={payeeScope}
+                  onChange={e => setPayeeScope(e.target.value === "international" ? "international" : "domestic")}
+                  className="w-full h-10 px-3 bg-white/5 border border-white/15 text-white rounded-sm text-sm"
+                  data-testid="select-payee-scope"
+                >
+                  <option value="domestic" className="bg-[#0B2218]">Domestic ({displayCurrency})</option>
+                  <option value="international" className="bg-[#0B2218]">International (SWIFT)</option>
+                </select>
+              </div>
+
               <div className="space-y-1.5">
                 <label htmlFor="payee-name" className="label-caps text-white/60 block">Beneficiary Name</label>
                 <Input
@@ -1182,7 +1222,7 @@ export default function TransfersPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <label htmlFor="payee-type" className="label-caps text-white/60 block">Recipient Type</label>
+                <label htmlFor="payee-type" className="label-caps text-white/60 block">Type</label>
                 <select
                   id="payee-type"
                   value={payeeType}
@@ -1191,72 +1231,82 @@ export default function TransfersPage() {
                   data-testid="select-payee-type"
                 >
                   <option value="individual" className="bg-[#0B2218]">Individual</option>
-                  <option value="business" className="bg-[#0B2218]">Corporate / Business</option>
+                  <option value="business" className="bg-[#0B2218]">Business</option>
                 </select>
               </div>
-              <div className="space-y-1.5">
-                <label htmlFor="payee-country" className="label-caps text-white/60 block">Destination Country</label>
-                <select
-                  id="payee-country"
-                  value={payeeCountry}
-                  onChange={e => setPayeeCountry(e.target.value)}
-                  className="w-full h-10 px-3 bg-white/5 border border-white/15 text-white rounded-sm text-sm"
-                  data-testid="select-payee-country"
-                >
-                  {ONBOARDING_COUNTRIES.map(c => (
-                    <option key={c.v} value={c.v} className="bg-[#0B2218]">{c.l}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-1.5">
-                <label htmlFor="payee-currency" className="label-caps text-white/60 block">Settlement Currency</label>
-                <select
-                  id="payee-currency"
-                  value={payeeCurrency}
-                  onChange={e => {
-                    if (isBalanceCurrency(e.target.value)) setPayeeCurrency(e.target.value);
-                  }}
-                  className="w-full h-10 px-3 bg-white/5 border border-white/15 text-white rounded-sm text-sm"
-                  data-testid="select-payee-currency"
-                >
-                  {BALANCE_CURRENCIES.map(code => (
-                    <option key={code} value={code} className="bg-[#0B2218]">
-                      {code} — {BALANCE_CURRENCY_INFO[code].name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+
+              {payeeScope === "international" && (
+                <>
+                  <div className="space-y-1.5">
+                    <label htmlFor="payee-country" className="label-caps text-white/60 block">Country</label>
+                    <select
+                      id="payee-country"
+                      value={payeeCountry}
+                      onChange={e => setPayeeCountry(e.target.value)}
+                      className="w-full h-10 px-3 bg-white/5 border border-white/15 text-white rounded-sm text-sm"
+                      data-testid="select-payee-country"
+                    >
+                      {ONBOARDING_COUNTRIES.map(c => (
+                        <option key={c.v} value={c.v} className="bg-[#0B2218]">{c.l}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label htmlFor="payee-currency" className="label-caps text-white/60 block">Currency</label>
+                    <select
+                      id="payee-currency"
+                      value={payeeCurrency}
+                      onChange={e => {
+                        if (isBalanceCurrency(e.target.value)) setPayeeCurrency(e.target.value);
+                      }}
+                      className="w-full h-10 px-3 bg-white/5 border border-white/15 text-white rounded-sm text-sm"
+                      data-testid="select-payee-currency"
+                    >
+                      {BALANCE_CURRENCIES.map(code => (
+                        <option key={code} value={code} className="bg-[#0B2218]">
+                          {code} — {BALANCE_CURRENCY_INFO[code].name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              )}
+
               <div className="space-y-1.5 sm:col-span-2">
-                <label htmlFor="payee-bank" className="label-caps text-white/60 block">Beneficiary Bank Name</label>
+                <label htmlFor="payee-bank" className="label-caps text-white/60 block">Bank Name</label>
                 <Input
                   id="payee-bank"
                   value={payeeBankName}
                   onChange={e => setPayeeBankName(e.target.value)}
-                  placeholder="e.g. Barclays Bank PLC, JPMorgan Chase, HSBC"
+                  placeholder={payeeScope === "domestic" ? "e.g. RBC Royal Bank" : "e.g. Barclays Bank PLC"}
                   className="bg-white/5 border-white/15 text-white placeholder:text-white/30"
                   data-testid="input-payee-bank"
                   required
                 />
               </div>
               <div className="space-y-1.5">
-                <label htmlFor="payee-account" className="label-caps text-white/60 block">IBAN / Account Number</label>
+                <label htmlFor="payee-account" className="label-caps text-white/60 block">
+                  {payeeScope === "international" ? "IBAN / Account Number" : "Account Number"}
+                </label>
                 <Input
                   id="payee-account"
                   value={payeeAccountNumber}
                   onChange={e => setPayeeAccountNumber(e.target.value)}
-                  placeholder="Account number or IBAN"
+                  placeholder={payeeScope === "international" ? "IBAN or account" : "Account number"}
                   className="bg-white/5 border-white/15 text-white placeholder:text-white/30 font-mono"
                   data-testid="input-payee-account"
                   required
                 />
               </div>
               <div className="space-y-1.5">
-                <label htmlFor="payee-swift" className="label-caps text-white/60 block">SWIFT / BIC / Routing Number</label>
+                <label htmlFor="payee-swift" className="label-caps text-white/60 block">
+                  {payeeScope === "international" ? "SWIFT / BIC" : "Routing / Transit"}
+                </label>
                 <Input
                   id="payee-swift"
                   value={payeeRoutingNumber}
                   onChange={e => setPayeeRoutingNumber(e.target.value)}
-                  placeholder="e.g. BARCGB22 or ABA routing"
+                  placeholder={payeeScope === "international" ? "e.g. BARCGB22" : "Routing number"}
                   className="bg-white/5 border-white/15 text-white placeholder:text-white/30 font-mono"
                   data-testid="input-payee-routing"
                   required
