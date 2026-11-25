@@ -28,15 +28,15 @@ export function InitialDepositBanner({
       role="region"
       aria-label="Account activation"
       data-testid="banner-initiate-initial-deposit"
-      className="rounded-sm border border-amber-500/40 bg-[#0B2218] text-white px-4 sm:px-5 py-3.5 sm:py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4"
+      className="rounded-lg border border-[#C6A15B]/45 bg-[#0B2218] text-white px-4 sm:px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 shadow-xs"
     >
-      <div className="flex items-start gap-3 min-w-0 flex-1">
-        <div className="w-9 h-9 rounded-sm bg-amber-500/15 border border-amber-500/30 flex items-center justify-center shrink-0 mt-0.5">
-          <StatusIcon className="w-4 h-4 text-amber-400" aria-hidden="true" />
+      <div className="flex items-start gap-3.5 min-w-0 flex-1">
+        <div className="w-9 h-9 rounded-md bg-[#C6A15B]/15 border border-[#C6A15B]/35 flex items-center justify-center shrink-0 mt-0.5">
+          <StatusIcon className="w-4 h-4 text-[#DFBD76]" aria-hidden="true" />
         </div>
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <h2 className="text-sm font-semibold tracking-tight text-white [overflow-wrap:anywhere]">
+            <h2 className="font-sans text-sm font-semibold tracking-tight text-white [overflow-wrap:anywhere]">
               {isPendingReview ? "Initial Deposit Pending Review" : "Initial Deposit Required"}
             </h2>
             <InfoTip
@@ -45,7 +45,7 @@ export function InitialDepositBanner({
               content="Transfer and investment features unlock once your initial deposit is submitted and verified by an administrator."
             />
           </div>
-          <p className="text-xs text-white/65 [overflow-wrap:anywhere]">
+          <p className="text-xs text-white/70 [overflow-wrap:anywhere]">
             <span>{isPendingReview ? "Pending verification" : "Transfers & investing locked"}</span>
             {selectedInitialDeposit && (
               <>
@@ -65,7 +65,7 @@ export function InitialDepositBanner({
       <Button
         size="sm"
         onClick={onAction}
-        className="w-full sm:w-auto bg-amber-400 hover:bg-amber-300 text-[#0B2218] rounded-sm text-xs font-semibold whitespace-nowrap shrink-0"
+        className="w-full sm:w-auto bg-[#C6A15B] hover:bg-[#d3b06d] text-[#0B2218] rounded-md text-xs font-semibold whitespace-nowrap shrink-0"
         data-testid="button-dashboard-initiate-deposit"
       >
         {isPendingReview ? "View Deposit" : "Make Initial Deposit"}

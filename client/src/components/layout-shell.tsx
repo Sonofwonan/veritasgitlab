@@ -7,7 +7,7 @@ import { fundsActionFeedback } from "@shared/funds-access";
 import { LIQUIDATION_STATUS_UNAVAILABLE } from "@shared/liquidation";
 import { FundsActionDialog } from "@/components/fees/funds-action-dialog";
 import { ShieldAlert, Snowflake, AlertTriangle } from "lucide-react";
-import { SlideOutNavigation } from "@/components/navigation/slide-out-navigation";
+import { SlideOutNavigation, DesktopSidebar } from "@/components/navigation/slide-out-navigation";
 import { Button } from "@/components/ui/button";
 import { 
   Dialog,
@@ -50,9 +50,10 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      <div onClickCapture={guardFundsAction} className="flex h-[100dvh] w-full overflow-hidden bg-background">
+      <div onClickCapture={guardFundsAction} className="flex h-[100dvh] w-full overflow-hidden bg-[#F6F7F8] dark:bg-background">
+        <DesktopSidebar location={location} onNavigate={setLocation} />
         <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
-          <SlideOutNavigation location={location}
+          <SlideOutNavigation location={location} userName={user?.name}
             open={sidebarOpen} onOpenChange={setSidebarOpen} onNavigate={setLocation} />
 
           {(user as any)?.accountFrozen && (
@@ -87,8 +88,8 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
               </div>
             </div>
           )}
-          <main className="flex-1 overflow-y-auto overflow-x-hidden p-2.5 sm:p-3 md:p-4 bg-muted/5 custom-scrollbar">
-            <div className="w-full max-w-7xl mx-auto min-w-0 space-y-2.5 md:space-y-3 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <main className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-5 lg:p-7 bg-[#F6F7F8] dark:bg-background custom-scrollbar">
+            <div className="w-full max-w-6xl mx-auto min-w-0 space-y-4 sm:space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-300">
               {children}
             </div>
           </main>

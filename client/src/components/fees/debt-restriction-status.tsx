@@ -7,14 +7,14 @@ export function DebtRestrictionStatus({ requiresPayment, data, error, retry }: {
   // Failures or legacy policies lacking admin provenance do not establish a reason.
   if (error || !data) {
     return <div role="status" data-testid="debt-restriction-unavailable"
-      className="border border-border/60 px-4 py-3 text-xs text-muted-foreground">
+      className="rounded-lg border border-slate-200/90 dark:border-border bg-white dark:bg-card px-4 py-3 text-xs text-muted-foreground">
       {error ? "We couldn't check access to your funds. Please retry." : "Checking access to your funds…"}
       {error && <button type="button" onClick={retry} className="ml-2 min-h-11 underline">Retry</button>}
     </div>;
   }
   if (!data.locked || !data.debtRestrictionConfirmed) return null;
   return <div role="status" data-testid="debt-restriction-status"
-    className="flex items-center gap-3 border border-amber-300/60 bg-amber-50/60 px-4 py-3 text-sm text-foreground">
+    className="flex items-center gap-3 rounded-lg border border-amber-300/70 bg-amber-50/80 dark:bg-amber-950/30 px-4 py-3 text-sm text-foreground">
     Transfers and investing are on hold. Please contact your advisor about your account payment.
   </div>;
 }

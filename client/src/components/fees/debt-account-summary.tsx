@@ -53,11 +53,11 @@ export function DebtAccountSummary({
 }: DebtAccountSummaryProps) {
   if (loading) {
     return (
-      <section data-testid="debt-account-summary" aria-label="Account balances" className="border border-border/60 p-4 sm:p-5">
+      <section data-testid="debt-account-summary" aria-label="Account balances" className="rounded-lg border border-slate-200/90 dark:border-border bg-white dark:bg-card p-4 sm:p-5">
         <div role="status" className="space-y-3">
           <span className="sr-only">Loading account balances…</span>
-          <div className="h-4 w-36 animate-pulse rounded-sm bg-muted" />
-          <div className="h-16 w-full animate-pulse rounded-sm bg-muted/70" />
+          <div className="h-4 w-36 animate-pulse rounded-md bg-muted" />
+          <div className="h-16 w-full animate-pulse rounded-md bg-muted/70" />
         </div>
       </section>
     );
@@ -65,7 +65,7 @@ export function DebtAccountSummary({
 
   if (error) {
     return (
-      <section data-testid="debt-account-summary" aria-label="Account balances" className="border border-border/60 p-4 sm:p-5">
+      <section data-testid="debt-account-summary" aria-label="Account balances" className="rounded-lg border border-slate-200/90 dark:border-border bg-white dark:bg-card p-4 sm:p-5">
         <div role="alert" className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           <span>Account balance details are unavailable.</span>
           <button type="button" onClick={retry} disabled={!retry} className="font-medium text-foreground underline underline-offset-4 disabled:cursor-not-allowed disabled:opacity-50">
@@ -131,9 +131,9 @@ export function DebtAccountSummary({
   if (owingAccounts.length === 0) {
     if (hasKnownZeroTotal) return null;
     return (
-      <section data-testid="debt-account-summary" aria-label="Account balances" className="border border-border/60 p-4 sm:p-5">
+      <section data-testid="debt-account-summary" aria-label="Account balances" className="rounded-lg border border-slate-200/90 dark:border-border bg-white dark:bg-card p-4 sm:p-5">
         <div className="flex flex-col gap-1">
-          <h2 className="text-sm font-semibold">Account balances</h2>
+          <h2 className="font-sans text-sm font-semibold">Account balances</h2>
           <div className="text-sm text-muted-foreground">Account details unavailable</div>
         </div>
       </section>
@@ -143,11 +143,11 @@ export function DebtAccountSummary({
   const showAccountNumbers = variant === "accounts" && owingAccounts.length > 1;
 
   return (
-    <section data-testid="debt-account-summary" aria-label="Account balances" className="border border-border/60 rounded-sm overflow-hidden">
-      <div className="border-b border-border/60 bg-muted/20 px-4 py-3 sm:px-5">
-        <h2 className="text-sm font-semibold">Account balances</h2>
+    <section data-testid="debt-account-summary" aria-label="Account balances" className="border border-slate-200/90 dark:border-border bg-white dark:bg-card rounded-lg overflow-hidden shadow-xs">
+      <div className="border-b border-slate-100 dark:border-border bg-slate-50/70 dark:bg-muted/20 px-4 py-3 sm:px-5">
+        <h2 className="font-sans text-sm font-semibold text-slate-900 dark:text-foreground">Account balances</h2>
       </div>
-      <div className="divide-y divide-border/50">
+      <div className="divide-y divide-slate-100 dark:divide-border/50">
         {owingAccounts.map(({ account, amount, known }) => {
           const displayedAmount = amount === null ? null : variant === "accounts" ? amount : amount === 0 ? 0 : -amount;
           const amountLabel = hidden ? MASKED_AMOUNT : known && displayedAmount !== null ? formatBalance(displayedAmount, currency) : "Unavailable";
