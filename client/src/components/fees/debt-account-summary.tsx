@@ -176,7 +176,7 @@ export function DebtAccountSummary({
               <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-4 gap-y-2 sm:flex-col sm:items-end sm:justify-center sm:gap-1">
                 <div
                   data-testid={`debt-account-amount-${account.accountId}`}
-                  className={`min-w-0 whitespace-nowrap text-left font-mono text-[clamp(0.875rem,4vw,1rem)] font-semibold tabular-nums sm:text-right ${variant === "dashboard" ? "text-red-700 dark:text-red-300" : "text-black dark:text-foreground"}`}
+                  className={`min-w-0 whitespace-nowrap text-left font-sans text-[clamp(0.875rem,4vw,1rem)] font-semibold tabular-nums sm:text-right ${variant === "dashboard" ? "text-red-700 dark:text-red-300" : "text-black dark:text-foreground"}`}
                 >
                   {amountLabel}
                 </div>

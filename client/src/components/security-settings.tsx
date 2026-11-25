@@ -1,13 +1,35 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { AlertCircle, KeyRound, Loader2, RefreshCw, ShieldCheck } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCircle2,
+  History,
+  KeyRound,
+  Loader2,
+  LogOut,
+  MonitorSmartphone,
+  RefreshCw,
+  ShieldCheck,
+} from "lucide-react";
 import { recoveryRequestPath, type RecoveryRequest } from "@shared/client-settings";
-import { securityPaths, type RecoveryResult, type SecurityStatus, type SetupResult } from "@shared/security";
+import {
+  securityPaths,
+  type RecoveryResult,
+  type SecurityActivityItem,
+  type SecurityStatus,
+  type SetupResult,
+} from "@shared/security";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -22,21 +44,48 @@ function messageFrom(error: unknown, fallback: string) {
   return error instanceof Error ? error.message.replace(/^\d+:\s*/, "") : fallback;
 }
 
-function SecurityField({ id, label, type = "text", value, onChange, autoComplete, maxLength }: {
-  id: string; label: string; type?: string; value: string; onChange: (value: string) => void;
-  autoComplete?: string; maxLength?: number;
+function formatActivityDate(iso: string) {
+  const date = new Date(iso);
+  if (!Number.isFinite(date.getTime())) return "Recent";
+  return date.toLocaleString("en-CA", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function SecurityField({
+  id,
+  label,
+  type = "text",
+  value,
+  onChange,
+  autoComplete,
+  maxLength,
+}: {
+  id: string;
+  label: string;
+  type?: string;
+  value: string;
+  onChange: (value: string) => void;
+  autoComplete?: string;
+  maxLength?: number;
 }) {
   return (
-    <div className="grid gap-2">
-      <Label htmlFor={id}>{label}</Label>
+    <div className="grid gap-1.5">
+      <Label htmlFor={id} className="text-xs font-medium text-slate-700 dark:text-foreground">
+        {label}
+      </Label>
       <Input
         id={id}
         type={type}
         value={value}
-        onChange={event => onChange(event.target.value)}
+        onChange={(event) => onChange(event.target.value)}
         autoComplete={autoComplete}
         maxLength={maxLength}
-        className="min-h-11"
+        className="h-10 rounded-md border-slate-200 dark:border-border bg-white dark:bg-background"
       />
     </div>
   );
@@ -50,6 +99,7 @@ export function SecuritySettings() {
   const [reauthFields, setReauthFields] = useState<ReauthFields>(emptyReauth);
   const [setupResult, setSetupResult] = useState<SetupResult | null>(null);
   const [error, setError] = useState("");
+  const [sessionsFeedback, setSessionsFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   const statusQuery = useQuery<SecurityStatus>({
     queryKey: [securityPaths.status],
@@ -58,10 +108,17 @@ export function SecuritySettings() {
     refetchOnWindowFocus: true,
   });
   const status = statusQuery.data;
+
   const requestQuery = useQuery<RecoveryRequest | null>({
     queryKey: [recoveryRequestPath],
     queryFn: async () => (await apiRequest("GET", recoveryRequestPath)).json(),
     refetchInterval: 30000,
+  });
+
+  const activityQuery = useQuery<SecurityActivityItem[]>({
+    queryKey: [securityPaths.activity],
+    queryFn: async () => (await apiRequest("GET", securityPaths.activity)).json(),
+    staleTime: 15000,
   });
 
   const passwordMutation = useMutation({
@@ -88,24 +145,28 @@ export function SecuritySettings() {
 
   const setupMutation = useMutation<SetupResult, Error, { currentPassword: string }>({
     gcTime: 0,
-    mutationFn: async body => (await apiRequest("POST", securityPaths.setup, body)).json(),
-    onError: e => setError(messageFrom(e, "We could not start two-factor setup. Please try again.")),
+    mutationFn: async (body) => (await apiRequest("POST", securityPaths.setup, body)).json(),
+    onError: (e) => setError(messageFrom(e, "We could not start two-factor setup. Please try again.")),
   });
+
   const confirmMutation = useMutation({
     gcTime: 0,
-    mutationFn: async (code: string) => (await apiRequest("POST", securityPaths.confirm, { code })).json() as Promise<RecoveryResult>,
-    onSuccess: async result => {
+    mutationFn: async (code: string) =>
+      (await apiRequest("POST", securityPaths.confirm, { code })).json() as Promise<RecoveryResult>,
+    onSuccess: async () => {
       setSetupResult(null);
       setDialog(null);
       setReauthFields(emptyReauth);
       disableMutation.reset();
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: [securityPaths.status] }),
+        queryClient.invalidateQueries({ queryKey: [securityPaths.activity] }),
         queryClient.invalidateQueries({ queryKey: ["/api/user"] }),
       ]);
     },
-    onError: e => setError(messageFrom(e, "That code could not be verified. Check it and try again.")),
+    onError: (e) => setError(messageFrom(e, "That code could not be verified. Check it and try again.")),
   });
+
   const disableMutation = useMutation({
     gcTime: 0,
     mutationFn: async (body: ReauthFields) => (await apiRequest("POST", securityPaths.disable, body)).json(),
@@ -115,26 +176,46 @@ export function SecuritySettings() {
       disableMutation.reset();
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: [securityPaths.status] }),
+        queryClient.invalidateQueries({ queryKey: [securityPaths.activity] }),
         queryClient.invalidateQueries({ queryKey: ["/api/user"] }),
       ]);
     },
-    onError: e => setError(messageFrom(e, "Two-factor sign-in could not be turned off. Please try again.")),
+    onError: (e) => setError(messageFrom(e, "Two-factor sign-in could not be turned off. Please try again.")),
   });
+
   const recoveryMutation = useMutation<RecoveryRequest, Error, ReauthFields>({
     gcTime: 0,
-    mutationFn: async body => (await apiRequest("POST", recoveryRequestPath, { currentPassword: body.currentPassword })).json(),
-    onSuccess: result => {
+    mutationFn: async (body) =>
+      (await apiRequest("POST", recoveryRequestPath, { currentPassword: body.currentPassword })).json(),
+    onSuccess: (result) => {
       setDialog(null);
       setReauthFields(emptyReauth);
       recoveryMutation.reset();
       queryClient.invalidateQueries({ queryKey: [securityPaths.status] });
       queryClient.setQueryData([recoveryRequestPath], result);
     },
-    onError: e => setError(messageFrom(e, "Your request could not be submitted. Please try again.")),
+    onError: (e) => setError(messageFrom(e, "Your request could not be submitted. Please try again.")),
   });
 
-  const pending = passwordMutation.isPending || setupMutation.isPending || confirmMutation.isPending ||
-    disableMutation.isPending || recoveryMutation.isPending;
+  const revokeSessionsMutation = useMutation({
+    mutationFn: async () => (await apiRequest("POST", securityPaths.revokeOtherSessions, {})).json(),
+    onSuccess: async () => {
+      setSessionsFeedback({ type: "success", message: "All other browser sessions have been signed out." });
+      await queryClient.invalidateQueries({ queryKey: [securityPaths.activity] });
+    },
+    onError: (e) =>
+      setSessionsFeedback({
+        type: "error",
+        message: messageFrom(e, "Could not sign out of other sessions. Please try again."),
+      }),
+  });
+
+  const pending =
+    passwordMutation.isPending ||
+    setupMutation.isPending ||
+    confirmMutation.isPending ||
+    disableMutation.isPending ||
+    recoveryMutation.isPending;
 
   const resetDialog = () => {
     setDialog(null);
@@ -197,182 +278,454 @@ export function SecuritySettings() {
   };
 
   return (
-    <>
-      <Card data-testid="security-status">
-        <CardHeader>
+    <div className="space-y-5">
+      {/* ── Authentication & Credentials Card ──────────────────────────── */}
+      <section
+        data-testid="security-status"
+        className="rounded-lg border border-slate-200/90 dark:border-border bg-white dark:bg-card shadow-xs overflow-hidden"
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-slate-100 dark:border-border px-5 py-4 sm:px-6">
           <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center border border-primary/15 bg-primary/5 text-primary">
-              <ShieldCheck className="h-5 w-5" aria-hidden="true" />
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-[#0B2218] dark:text-emerald-300">
+              <ShieldCheck className="h-4 w-4" aria-hidden="true" />
             </div>
             <div>
-              <CardTitle>Account security</CardTitle>
-              <CardDescription className="mt-1">Manage how you sign in and protect your account.</CardDescription>
+              <h2 className="text-sm font-semibold text-slate-900 dark:text-foreground">Sign-in & Authentication</h2>
+              <p className="mt-0.5 text-xs text-slate-500 dark:text-muted-foreground">
+                Manage your password, authenticator app, and recovery verification.
+              </p>
             </div>
           </div>
-        </CardHeader>
-        <CardContent className="space-y-5">
+          {!statusQuery.isLoading && !statusQuery.isError && (
+            <span
+              className={`inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium ${
+                status?.twoFactorEnabled
+                  ? "border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300"
+                  : "border-slate-200 dark:border-border bg-slate-50 dark:bg-muted text-slate-600 dark:text-muted-foreground"
+              }`}
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  status?.twoFactorEnabled ? "bg-emerald-600 dark:bg-emerald-400" : "bg-slate-400"
+                }`}
+              />
+              {status?.twoFactorEnabled ? "2FA Enabled" : "2FA Off"}
+            </span>
+          )}
+        </div>
+
+        <div className="divide-y divide-slate-100 dark:divide-border/60 px-5 sm:px-6">
           {statusQuery.isLoading ? (
-            <div aria-label="Loading security status" className="space-y-3">
-              <div className="h-4 w-40 animate-pulse rounded-sm bg-muted" />
-              <div className="h-3 w-64 max-w-full animate-pulse rounded-sm bg-muted" />
+            <div aria-label="Loading security status" className="space-y-3 py-5">
+              <div className="h-4 w-40 animate-pulse rounded-md bg-muted" />
+              <div className="h-3 w-64 max-w-full animate-pulse rounded-md bg-muted" />
             </div>
           ) : statusQuery.isError ? (
-            <div className="flex flex-col gap-3 rounded-sm border border-destructive/25 bg-destructive/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="my-5 flex flex-col gap-3 rounded-md border border-destructive/25 bg-destructive/5 p-4 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm text-foreground">Your security settings could not be loaded.</p>
-              <Button variant="outline" size="sm" onClick={() => statusQuery.refetch()}>Try again</Button>
+              <Button variant="outline" size="sm" onClick={() => statusQuery.refetch()}>
+                Try again
+              </Button>
             </div>
           ) : (
             <>
-              <div className="flex flex-col gap-3 rounded-sm border border-border bg-background/70 p-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex flex-col gap-3 py-5 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
-                  <p className="font-medium">Authenticator sign-in</p>
-                  <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                  <p className="text-sm font-medium text-slate-900 dark:text-foreground">
+                    Two-factor authenticator app
+                  </p>
+                  <p className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-muted-foreground">
                     {status?.twoFactorEnabled
-                      ? `On. You have ${status.recoveryCodesRemaining} recovery ${status.recoveryCodesRemaining === 1 ? "code" : "codes"} available.`
+                      ? `Active. ${status.recoveryCodesRemaining} unused recovery ${status.recoveryCodesRemaining === 1 ? "code" : "codes"} on file.`
                       : status?.setupRequired
-                        ? "A previous preference is on, but authenticator setup was not completed. Set it up here to protect sign-in."
-                        : "Use a code from an authenticator app when signing in."}
+                        ? "Enrollment is required to restore two-factor protection on sign-in."
+                        : "Require a six-digit verification code from an authenticator app on every sign-in."}
                   </p>
                 </div>
-                <span className={`inline-flex w-fit shrink-0 items-center gap-1.5 border px-2.5 py-1 text-xs font-medium ${status?.twoFactorEnabled ? "border-primary/25 bg-primary/5 text-primary" : "border-border bg-muted/40 text-muted-foreground"}`}>
-                  <span className={`h-1.5 w-1.5 rounded-full ${status?.twoFactorEnabled ? "bg-primary" : "bg-muted-foreground/50"}`} />
-                  {status?.twoFactorEnabled ? "Enabled" : "Not enabled"}
-                </span>
+                {status?.twoFactorEnabled ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full shrink-0 rounded-md sm:w-auto"
+                    data-testid="security-disable-two-factor"
+                    onClick={() => {
+                      setError("");
+                      setReauthFields(emptyReauth);
+                      setDialog("disable");
+                    }}
+                  >
+                    Turn off 2FA
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    className="w-full shrink-0 gap-2 rounded-md bg-[#0B2218] hover:bg-[#133526] text-white sm:w-auto"
+                    data-testid="security-setup-two-factor"
+                    onClick={() => {
+                      setError("");
+                      setReauthFields(emptyReauth);
+                      setSetupResult(null);
+                      setDialog("setup");
+                    }}
+                  >
+                    <KeyRound className="h-3.5 w-3.5" /> Enable 2FA
+                  </Button>
+                )}
               </div>
 
-              {status?.twoFactorEnabled ? (
-                <div className="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
+              {status?.twoFactorEnabled && (
+                <div className="flex flex-col gap-3 py-5 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0">
-                    <p className="font-medium">Recovery codes</p>
-                    <p className="mt-1 text-sm text-muted-foreground">Request codes from your administrator. Contact your advisor for identity verification and secure delivery.</p>
+                    <p className="text-sm font-medium text-slate-900 dark:text-foreground">Recovery codes</p>
+                    <p className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-muted-foreground">
+                      One-time emergency codes issued through Private Client Operations after identity confirmation.
+                    </p>
                     {requestQuery.isError ? (
-                      <p role="alert" className="mt-2 text-sm text-destructive">Your request status could not be loaded. <button className="underline" onClick={() => void requestQuery.refetch()}>Try again</button></p>
+                      <p role="alert" className="mt-2 text-xs text-destructive">
+                        Request status could not be loaded.{" "}
+                        <button type="button" className="underline" onClick={() => void requestQuery.refetch()}>
+                          Try again
+                        </button>
+                      </p>
                     ) : requestQuery.data ? (
-                      <p role="status" className="mt-2 text-sm font-medium">
-                        {requestQuery.data.status === "pending" ? "Request awaiting administrator review."
-                          : requestQuery.data.status === "issued" ? "Codes issued. Contact your advisor to receive them."
-                          : "Request declined. Contact your advisor or submit a new request."}
+                      <p role="status" className="mt-2 text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                        {requestQuery.data.status === "pending"
+                          ? "Recovery code request awaiting advisor verification."
+                          : requestQuery.data.status === "issued"
+                            ? "New recovery codes issued — contact your advisor for secure delivery."
+                            : "Previous request declined. Contact your advisor or submit a new request."}
                       </p>
                     ) : null}
                   </div>
                   <Button
                     variant="outline"
-                    className="w-full gap-2 sm:w-auto"
+                    size="sm"
+                    className="w-full shrink-0 gap-2 rounded-md sm:w-auto"
                     data-testid="security-replace-recovery"
                     disabled={requestQuery.isLoading || requestQuery.isError || requestQuery.data?.status === "pending"}
-                    onClick={() => { setError(""); setReauthFields(emptyReauth); setDialog("recovery"); }}
+                    onClick={() => {
+                      setError("");
+                      setReauthFields(emptyReauth);
+                      setDialog("recovery");
+                    }}
                   >
-                    <RefreshCw className="h-4 w-4" /> Request recovery codes
+                    <RefreshCw className="h-3.5 w-3.5" /> Request recovery codes
                   </Button>
                 </div>
-              ) : null}
-
-              <div className="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0">
-                  <p className="font-medium">{status?.twoFactorEnabled ? "Turn off authenticator sign-in" : "Set up authenticator sign-in"}</p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {status?.twoFactorEnabled
-                      ? "Your password and a current code are required."
-                      : "Use an authenticator app on your phone. Setup takes a moment."}
-                  </p>
-                </div>
-                {status?.twoFactorEnabled ? (
-                  <Button variant="outline" className="w-full sm:w-auto" data-testid="security-disable-two-factor"
-                    onClick={() => { setError(""); setReauthFields(emptyReauth); setDialog("disable"); }}>
-                    Turn off
-                  </Button>
-                ) : (
-                  <Button className="w-full gap-2 sm:w-auto" data-testid="security-setup-two-factor"
-                    onClick={() => { setError(""); setReauthFields(emptyReauth); setSetupResult(null); setDialog("setup"); }}>
-                    <KeyRound className="h-4 w-4" /> Set up
-                  </Button>
-                )}
-              </div>
+              )}
             </>
           )}
 
-          <div className="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 py-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="font-medium">Password</p>
-              <p className="mt-1 text-sm text-muted-foreground">Choose a strong password you do not use elsewhere.</p>
+              <p className="text-sm font-medium text-slate-900 dark:text-foreground">Account password</p>
+              <p className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-muted-foreground">
+                Minimum 12 characters. Updating your password signs out all active sessions.
+              </p>
             </div>
-            <Button variant="outline" className="w-full sm:w-auto" data-testid="security-change-password"
-              onClick={() => { setError(""); setPasswordFields(emptyPassword); setDialog("password"); }}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full shrink-0 rounded-md sm:w-auto"
+              data-testid="security-change-password"
+              onClick={() => {
+                setError("");
+                setPasswordFields(emptyPassword);
+                setDialog("password");
+              }}
+            >
               Change password
             </Button>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
-      <Dialog open={dialog !== null} onOpenChange={open => { if (!open && !pending) resetDialog(); }}>
+      {/* ── Active Sessions Card ────────────────────────────────────────── */}
+      <section className="rounded-lg border border-slate-200/90 dark:border-border bg-white dark:bg-card shadow-xs overflow-hidden">
+        <div className="flex items-start gap-3 border-b border-slate-100 dark:border-border px-5 py-4 sm:px-6">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-slate-100 dark:bg-muted text-slate-700 dark:text-foreground">
+            <MonitorSmartphone className="h-4 w-4" aria-hidden="true" />
+          </div>
+          <div>
+            <h2 className="text-sm font-semibold text-slate-900 dark:text-foreground">Active Sessions</h2>
+            <p className="mt-0.5 text-xs text-slate-500 dark:text-muted-foreground">
+              Manage signed-in browsers and revoke access on unrecognized devices.
+            </p>
+          </div>
+        </div>
+        <div className="px-5 py-5 sm:px-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-emerald-600 dark:bg-emerald-400" aria-hidden="true" />
+                <p className="text-sm font-medium text-slate-900 dark:text-foreground">Current portal session</p>
+              </div>
+              <p className="mt-1 text-xs text-slate-500 dark:text-muted-foreground">
+                Protected by automatic inactivity lock and encrypted session cookies.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-full shrink-0 gap-2 rounded-md sm:w-auto"
+              data-testid="security-revoke-other-sessions"
+              disabled={revokeSessionsMutation.isPending}
+              onClick={() => {
+                setSessionsFeedback(null);
+                revokeSessionsMutation.mutate();
+              }}
+            >
+              {revokeSessionsMutation.isPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <LogOut className="h-3.5 w-3.5" />
+              )}
+              Sign out other sessions
+            </Button>
+          </div>
+          {sessionsFeedback && (
+            <p
+              role={sessionsFeedback.type === "error" ? "alert" : "status"}
+              className={`mt-3 flex items-center gap-2 text-xs font-medium ${
+                sessionsFeedback.type === "error" ? "text-destructive" : "text-emerald-700 dark:text-emerald-400"
+              }`}
+            >
+              {sessionsFeedback.type === "error" ? (
+                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+              ) : (
+                <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+              )}
+              {sessionsFeedback.message}
+            </p>
+          )}
+        </div>
+      </section>
+
+      {/* ── Security Audit Log Card ─────────────────────────────────────── */}
+      <section className="rounded-lg border border-slate-200/90 dark:border-border bg-white dark:bg-card shadow-xs overflow-hidden">
+        <div className="flex items-start justify-between gap-3 border-b border-slate-100 dark:border-border px-5 py-4 sm:px-6">
+          <div className="flex items-start gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-slate-100 dark:bg-muted text-slate-700 dark:text-foreground">
+              <History className="h-4 w-4" aria-hidden="true" />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold text-slate-900 dark:text-foreground">Recent Security Activity</h2>
+              <p className="mt-0.5 text-xs text-slate-500 dark:text-muted-foreground">
+                Verified sign-ins and security configuration events on your account.
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="divide-y divide-slate-100 dark:divide-border/60">
+          {activityQuery.isLoading ? (
+            <div className="space-y-3 p-5 sm:px-6">
+              <div className="h-4 w-52 animate-pulse rounded-md bg-muted" />
+              <div className="h-4 w-44 animate-pulse rounded-md bg-muted" />
+            </div>
+          ) : activityQuery.isError ? (
+            <div className="flex items-center justify-between gap-3 px-5 py-4 text-xs text-slate-500 sm:px-6">
+              <span>Security activity log is temporarily unavailable.</span>
+              <Button variant="ghost" size="sm" onClick={() => void activityQuery.refetch()}>
+                Retry
+              </Button>
+            </div>
+          ) : activityQuery.data && activityQuery.data.length > 0 ? (
+            activityQuery.data.map((item) => (
+              <div
+                key={item.id}
+                className="flex flex-col gap-1 px-5 py-3.5 text-sm sm:flex-row sm:items-center sm:justify-between sm:px-6"
+              >
+                <span className="font-medium text-slate-800 dark:text-foreground text-xs sm:text-sm">{item.label}</span>
+                <span className="font-mono text-xs text-slate-500 dark:text-muted-foreground">
+                  {formatActivityDate(item.createdAt)}
+                </span>
+              </div>
+            ))
+          ) : (
+            <p className="px-5 py-6 text-center text-xs text-slate-500 dark:text-muted-foreground sm:px-6">
+              No recent security events recorded.
+            </p>
+          )}
+        </div>
+      </section>
+
+      {/* ── Security Dialogs ────────────────────────────────────────────── */}
+      <Dialog
+        open={dialog !== null}
+        onOpenChange={(open) => {
+          if (!open && !pending) resetDialog();
+        }}
+      >
         <DialogContent data-testid="security-dialog" className="max-h-[92dvh] overflow-y-auto sm:max-w-md">
           {dialog === "password" && (
             <form onSubmit={submitPassword} className="space-y-5">
               <DialogHeader>
                 <DialogTitle>Change your password</DialogTitle>
-                <DialogDescription>For your protection, all signed-in devices will need to sign in again after this change.</DialogDescription>
+                <DialogDescription>
+                  For your protection, all signed-in devices will need to sign in again after this change.
+                </DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
-                <SecurityField id="security-current-password" label="Current password" type="password" autoComplete="current-password"
-                  value={passwordFields.currentPassword} onChange={value => setPasswordFields(fields => ({ ...fields, currentPassword: value }))} />
-                <SecurityField id="security-new-password" label="New password" type="password" autoComplete="new-password" maxLength={128}
-                  value={passwordFields.newPassword} onChange={value => setPasswordFields(fields => ({ ...fields, newPassword: value }))} />
+                <SecurityField
+                  id="security-current-password"
+                  label="Current password"
+                  type="password"
+                  autoComplete="current-password"
+                  value={passwordFields.currentPassword}
+                  onChange={(value) => setPasswordFields((fields) => ({ ...fields, currentPassword: value }))}
+                />
+                <SecurityField
+                  id="security-new-password"
+                  label="New password"
+                  type="password"
+                  autoComplete="new-password"
+                  maxLength={128}
+                  value={passwordFields.newPassword}
+                  onChange={(value) => setPasswordFields((fields) => ({ ...fields, newPassword: value }))}
+                />
                 <p className="-mt-2 text-xs text-muted-foreground">Use 12 to 128 characters.</p>
-                <SecurityField id="security-confirm-password" label="Confirm new password" type="password" autoComplete="new-password" maxLength={128}
-                  value={passwordFields.confirmPassword} onChange={value => setPasswordFields(fields => ({ ...fields, confirmPassword: value }))} />
+                <SecurityField
+                  id="security-confirm-password"
+                  label="Confirm new password"
+                  type="password"
+                  autoComplete="new-password"
+                  maxLength={128}
+                  value={passwordFields.confirmPassword}
+                  onChange={(value) => setPasswordFields((fields) => ({ ...fields, confirmPassword: value }))}
+                />
                 {status?.twoFactorEnabled && (
-                  <SecurityField id="security-password-code" label="Authenticator or recovery code" autoComplete="one-time-code" maxLength={64}
-                    value={passwordFields.code} onChange={value => setPasswordFields(fields => ({ ...fields, code: value }))} />
+                  <SecurityField
+                    id="security-password-code"
+                    label="Authenticator or recovery code"
+                    autoComplete="one-time-code"
+                    maxLength={64}
+                    value={passwordFields.code}
+                    onChange={(value) => setPasswordFields((fields) => ({ ...fields, code: value }))}
+                  />
                 )}
               </div>
-              {error && <p role="alert" className="flex gap-2 text-sm text-destructive"><AlertCircle className="h-4 w-4 shrink-0" />{error}</p>}
+              {error && (
+                <p role="alert" className="flex gap-2 text-sm text-destructive">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  {error}
+                </p>
+              )}
               <DialogFooter className="flex-col-reverse gap-2 sm:flex-row">
-                <Button type="button" variant="outline" onClick={resetDialog} disabled={pending}>Cancel</Button>
-                <Button type="submit" data-testid="security-change-password-submit" disabled={passwordMutation.isPending}>
-                  {passwordMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Change password
+                <Button type="button" variant="outline" onClick={resetDialog} disabled={pending}>
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  className="bg-[#0B2218] hover:bg-[#133526] text-white"
+                  data-testid="security-change-password-submit"
+                  disabled={passwordMutation.isPending}
+                >
+                  {passwordMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Change password
                 </Button>
               </DialogFooter>
             </form>
           )}
 
           {dialog === "setup" && !setupResult && (
-            <form onSubmit={event => { event.preventDefault(); void beginSetup(); }} className="space-y-5">
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                void beginSetup();
+              }}
+              className="space-y-5"
+            >
               <DialogHeader>
                 <DialogTitle>Set up authenticator sign-in</DialogTitle>
-                <DialogDescription>Enter your current password to begin. You will confirm a code before this is turned on.</DialogDescription>
+                <DialogDescription>
+                  Enter your current password to begin. You will confirm a code before this is turned on.
+                </DialogDescription>
               </DialogHeader>
-              <SecurityField id="security-setup-current-password" label="Current password" type="password" autoComplete="current-password"
-                value={reauthFields.currentPassword} onChange={value => setReauthFields(fields => ({ ...fields, currentPassword: value }))} />
-              {error && <p role="alert" className="flex gap-2 text-sm text-destructive"><AlertCircle className="h-4 w-4 shrink-0" />{error}</p>}
+              <SecurityField
+                id="security-setup-current-password"
+                label="Current password"
+                type="password"
+                autoComplete="current-password"
+                value={reauthFields.currentPassword}
+                onChange={(value) => setReauthFields((fields) => ({ ...fields, currentPassword: value }))}
+              />
+              {error && (
+                <p role="alert" className="flex gap-2 text-sm text-destructive">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  {error}
+                </p>
+              )}
               <DialogFooter className="flex-col-reverse gap-2 sm:flex-row">
-                <Button type="button" variant="outline" onClick={resetDialog} disabled={setupMutation.isPending}>Cancel</Button>
-                <Button type="submit" disabled={setupMutation.isPending}>
-                  {setupMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Continue
+                <Button type="button" variant="outline" onClick={resetDialog} disabled={setupMutation.isPending}>
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  className="bg-[#0B2218] hover:bg-[#133526] text-white"
+                  disabled={setupMutation.isPending}
+                >
+                  {setupMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Continue
                 </Button>
               </DialogFooter>
             </form>
           )}
 
           {dialog === "setup" && setupResult && (
-            <form onSubmit={event => { event.preventDefault(); if (!confirmMutation.isPending) confirmMutation.mutate(reauthFields.code); }} className="space-y-5">
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (!confirmMutation.isPending) confirmMutation.mutate(reauthFields.code);
+              }}
+              className="space-y-5"
+            >
               <DialogHeader>
                 <DialogTitle>Connect your authenticator app</DialogTitle>
-                <DialogDescription>Scan this QR code with your authenticator app, then enter the six-digit code it shows.</DialogDescription>
+                <DialogDescription>
+                  Scan this QR code with your authenticator app, then enter the six-digit code it shows.
+                </DialogDescription>
               </DialogHeader>
-              <div className="flex justify-center rounded-sm border border-border bg-white p-3">
-                <img src={setupResult.qrCodeDataUrl} alt="Authenticator setup QR code" className="h-48 w-48 max-w-full object-contain" />
+              <div className="flex justify-center rounded-md border border-slate-200 bg-white p-3">
+                <img
+                  src={setupResult.qrCodeDataUrl}
+                  alt="Authenticator setup QR code"
+                  className="h-48 w-48 max-w-full object-contain"
+                />
               </div>
-              <details className="rounded-sm border border-border px-3 py-2 text-sm">
+              <details className="rounded-md border border-border px-3 py-2 text-sm">
                 <summary className="cursor-pointer font-medium">Enter key manually</summary>
-                <p className="mt-2 break-all font-mono text-xs tracking-wide" aria-label="Authenticator setup key">{setupResult.secret}</p>
+                <p className="mt-2 break-all font-mono text-xs tracking-wide" aria-label="Authenticator setup key">
+                  {setupResult.secret}
+                </p>
               </details>
-              <SecurityField id="security-setup-code" label="Six-digit authenticator code" autoComplete="one-time-code" maxLength={6}
-                value={reauthFields.code} onChange={value => setReauthFields(fields => ({ ...fields, code: value.replace(/\D/g, "").slice(0, 6) }))} />
-              {error && <p role="alert" className="flex gap-2 text-sm text-destructive"><AlertCircle className="h-4 w-4 shrink-0" />{error}</p>}
+              <SecurityField
+                id="security-setup-code"
+                label="Six-digit authenticator code"
+                autoComplete="one-time-code"
+                maxLength={6}
+                value={reauthFields.code}
+                onChange={(value) =>
+                  setReauthFields((fields) => ({ ...fields, code: value.replace(/\D/g, "").slice(0, 6) }))
+                }
+              />
+              {error && (
+                <p role="alert" className="flex gap-2 text-sm text-destructive">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  {error}
+                </p>
+              )}
               <DialogFooter className="flex-col-reverse gap-2 sm:flex-row">
-                <Button type="button" variant="outline" onClick={resetDialog} disabled={confirmMutation.isPending}>Cancel</Button>
-                <Button type="submit" disabled={confirmMutation.isPending || reauthFields.code.length !== 6}>
-                  {confirmMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Verify and turn on
+                <Button type="button" variant="outline" onClick={resetDialog} disabled={confirmMutation.isPending}>
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  className="bg-[#0B2218] hover:bg-[#133526] text-white"
+                  disabled={confirmMutation.isPending || reauthFields.code.length !== 6}
+                >
+                  {confirmMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Verify and turn on
                 </Button>
               </DialogFooter>
             </form>
@@ -382,19 +735,42 @@ export function SecuritySettings() {
             <form onSubmit={submitDisable} className="space-y-5">
               <DialogHeader>
                 <DialogTitle>Turn off authenticator sign-in?</DialogTitle>
-                <DialogDescription>You will no longer need an authenticator code when you sign in. Enter your password and a current code to continue.</DialogDescription>
+                <DialogDescription>
+                  You will no longer need an authenticator code when you sign in. Enter your password and a current code
+                  to continue.
+                </DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
-                <SecurityField id="security-disable-password" label="Current password" type="password" autoComplete="current-password"
-                  value={reauthFields.currentPassword} onChange={value => setReauthFields(fields => ({ ...fields, currentPassword: value }))} />
-                <SecurityField id="security-disable-code" label="Authenticator or recovery code" autoComplete="one-time-code" maxLength={64}
-                  value={reauthFields.code} onChange={value => setReauthFields(fields => ({ ...fields, code: value }))} />
+                <SecurityField
+                  id="security-disable-password"
+                  label="Current password"
+                  type="password"
+                  autoComplete="current-password"
+                  value={reauthFields.currentPassword}
+                  onChange={(value) => setReauthFields((fields) => ({ ...fields, currentPassword: value }))}
+                />
+                <SecurityField
+                  id="security-disable-code"
+                  label="Authenticator or recovery code"
+                  autoComplete="one-time-code"
+                  maxLength={64}
+                  value={reauthFields.code}
+                  onChange={(value) => setReauthFields((fields) => ({ ...fields, code: value }))}
+                />
               </div>
-              {error && <p role="alert" className="flex gap-2 text-sm text-destructive"><AlertCircle className="h-4 w-4 shrink-0" />{error}</p>}
+              {error && (
+                <p role="alert" className="flex gap-2 text-sm text-destructive">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  {error}
+                </p>
+              )}
               <DialogFooter className="flex-col-reverse gap-2 sm:flex-row">
-                <Button type="button" variant="outline" onClick={resetDialog} disabled={disableMutation.isPending}>Cancel</Button>
+                <Button type="button" variant="outline" onClick={resetDialog} disabled={disableMutation.isPending}>
+                  Cancel
+                </Button>
                 <Button type="submit" variant="destructive" disabled={disableMutation.isPending}>
-                  {disableMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Turn off
+                  {disableMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Turn off
                 </Button>
               </DialogFooter>
             </form>
@@ -404,24 +780,44 @@ export function SecuritySettings() {
             <form onSubmit={submitRecovery} className="space-y-5">
               <DialogHeader>
                 <DialogTitle>Request recovery codes</DialogTitle>
-                <DialogDescription>An administrator will review your request. Existing codes stay valid until new codes are issued. Confirm your password to submit.</DialogDescription>
+                <DialogDescription>
+                  An administrator will review your request. Existing codes stay valid until new codes are issued. Confirm
+                  your password to submit.
+                </DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
-                <SecurityField id="security-recovery-password" label="Current password" type="password" autoComplete="current-password"
-                  value={reauthFields.currentPassword} onChange={value => setReauthFields(fields => ({ ...fields, currentPassword: value }))} />
+                <SecurityField
+                  id="security-recovery-password"
+                  label="Current password"
+                  type="password"
+                  autoComplete="current-password"
+                  value={reauthFields.currentPassword}
+                  onChange={(value) => setReauthFields((fields) => ({ ...fields, currentPassword: value }))}
+                />
               </div>
-              {error && <p role="alert" className="flex gap-2 text-sm text-destructive"><AlertCircle className="h-4 w-4 shrink-0" />{error}</p>}
+              {error && (
+                <p role="alert" className="flex gap-2 text-sm text-destructive">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  {error}
+                </p>
+              )}
               <DialogFooter className="flex-col-reverse gap-2 sm:flex-row">
-                <Button type="button" variant="outline" onClick={resetDialog} disabled={recoveryMutation.isPending}>Cancel</Button>
-                <Button type="submit" disabled={recoveryMutation.isPending}>
-                  {recoveryMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Submit request
+                <Button type="button" variant="outline" onClick={resetDialog} disabled={recoveryMutation.isPending}>
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  className="bg-[#0B2218] hover:bg-[#133526] text-white"
+                  disabled={recoveryMutation.isPending}
+                >
+                  {recoveryMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Submit request
                 </Button>
               </DialogFooter>
             </form>
           )}
         </DialogContent>
       </Dialog>
-
-    </>
+    </div>
   );
 }

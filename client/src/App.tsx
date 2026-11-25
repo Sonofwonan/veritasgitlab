@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useEffect } from "react";
 import { BrandedLoader } from "@/components/branded-loader";
 import { SessionLoadError } from "@/components/session-load-error";
+import { applyThemeMode, normalizeThemeMode, readStoredThemeMode } from "@/lib/theme";
 
 import NotFound from "@/pages/not-found";
 import HomePage from "@/pages/home";
@@ -87,10 +88,27 @@ function Router() {
   );
 }
 
+function ThemeSync() {
+  const { user } = useAuth();
+  const mode = user ? normalizeThemeMode(user.theme) : readStoredThemeMode();
+
+  useEffect(() => {
+    applyThemeMode(mode);
+    if (mode !== "system" || typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const handleChange = () => applyThemeMode("system");
+    media.addEventListener("change", handleChange);
+    return () => media.removeEventListener("change", handleChange);
+  }, [mode]);
+
+  return null;
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
+        <ThemeSync />
         <Toaster />
         <Router />
       </TooltipProvider>

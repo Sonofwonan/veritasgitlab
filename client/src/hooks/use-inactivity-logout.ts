@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 
-const INACTIVITY_MS = 25 * 60 * 1000;
+const DEFAULT_TIMEOUT_MINUTES = 25;
 const WARNING_MS = 60 * 1000;
 const ACTIVITY_EVENTS = ["mousemove", "mousedown", "keydown", "touchstart", "scroll", "click"] as const;
 
-export function useInactivityLogout(onLogout: () => void) {
+export function useInactivityLogout(onLogout: () => void, timeoutMinutes = DEFAULT_TIMEOUT_MINUTES) {
+  const safeMinutes = Math.min(25, Math.max(5, Number.isFinite(timeoutMinutes) ? timeoutMinutes : DEFAULT_TIMEOUT_MINUTES));
+  const inactivityMs = safeMinutes * 60 * 1000;
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const logoutTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const warningTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -31,14 +33,14 @@ export function useInactivityLogout(onLogout: () => void) {
           return s - 1;
         });
       }, 1000);
-    }, INACTIVITY_MS - WARNING_MS);
+    }, Math.max(1000, inactivityMs - WARNING_MS));
 
     logoutTimer.current = setTimeout(() => {
       clearAll();
       setSecondsLeft(null);
       onLogout();
-    }, INACTIVITY_MS);
-  }, [clearAll, onLogout]);
+    }, inactivityMs);
+  }, [clearAll, onLogout, inactivityMs]);
 
   useEffect(() => {
     reset();

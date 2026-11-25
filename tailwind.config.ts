@@ -6,10 +6,10 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ["DM Sans", "sans-serif"],
-        display: ["Cormorant Garamond", "Georgia", "serif"],
-        serif: ["Cormorant Garamond", "Georgia", "serif"],
-        mono: ["DM Mono", "monospace"],
+        sans: ['"Plus Jakarta Sans"', "sans-serif"],
+        display: ['"Cormorant Garamond"', "Georgia", "serif"],
+        serif: ['"Cormorant Garamond"', "Georgia", "serif"],
+        mono: ['"IBM Plex Mono"', "monospace"],
       },
       colors: {
         border: "hsl(var(--border) / <alpha-value>)",
@@ -50,8 +50,8 @@ export default {
           light: "#2D4A38",
         },
         gold: {
-          DEFAULT: "#B8832A",
-          light: "#D4A84B",
+          DEFAULT: "#C6A15B",
+          light: "#DFBD76",
         },
         cream: {
           DEFAULT: "#F6F1E8",
@@ -60,8 +60,8 @@ export default {
       },
       borderRadius: {
         lg: "var(--radius)",
-        md: "calc(var(--radius) - 1px)",
-        sm: "calc(var(--radius))",
+        md: "calc(var(--radius) - 2px)",
+        sm: "calc(var(--radius) - 4px)",
       },
       fontSize: {
         "display-xl": ["clamp(3.5rem, 8vw, 7rem)", { lineHeight: "1.0", letterSpacing: "-0.03em" }],

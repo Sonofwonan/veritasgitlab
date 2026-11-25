@@ -7,6 +7,12 @@ export type MfaChallenge = { mfaRequired: true };
 export type SetupResult = { secret: string; qrCodeDataUrl: string; expiresAt: string };
 export type RecoveryResult = { recoveryCodes: string[] };
 export type Reauthentication = { currentPassword: string; code?: string };
+export type SecurityActivityItem = {
+  id: number;
+  event: string;
+  label: string;
+  createdAt: string;
+};
 
 export const securityPaths = {
   status: "/api/security/status",
@@ -16,4 +22,6 @@ export const securityPaths = {
   disable: "/api/security/two-factor/disable",
   recovery: "/api/security/two-factor/recovery",
   challenge: "/api/security/two-factor/challenge",
+  activity: "/api/security/activity",
+  revokeOtherSessions: "/api/security/sessions/revoke-others",
 } as const;

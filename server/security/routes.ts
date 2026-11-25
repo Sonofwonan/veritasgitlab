@@ -168,6 +168,49 @@ export function registerSecurityRoutes(app: Express) {
     await finishLogin(req, user, version, true);
     res.json(await safeUser(user));
   }));
+
+  const EVENT_LABELS: Record<string, string> = {
+    password_sign_in: "Signed in with password",
+    password_verified_for_mfa: "Password verified for two-factor sign-in",
+    mfa_sign_in: "Completed two-factor sign-in",
+    password_changed: "Account password updated",
+    password_reset_by_admin_link: "Password set via verified advisor link",
+    mfa_setup_started: "Authenticator setup initiated",
+    mfa_enabled: "Two-factor authentication enabled",
+    mfa_disabled: "Two-factor authentication disabled",
+    recovery_codes_replaced: "Recovery codes regenerated",
+    contact_details_updated: "Contact or address details updated",
+    banking_preferences_updated: "Statement and alert preferences updated",
+    other_sessions_signed_out: "Signed out of all other sessions",
+  };
+
+  app.get(securityPaths.activity, authenticated, securityHandler(async (req, res) => {
+    const userId = (req.user as User).id;
+    const { rows } = await pool.query(
+      `SELECT id, event, created_at AS "createdAt"
+       FROM client_security_events
+       WHERE user_id=$1
+       ORDER BY id DESC
+       LIMIT 15`,
+      [userId],
+    );
+    res.json(rows.map((row: { id: number; event: string; createdAt: Date | string }) => ({
+      id: Number(row.id),
+      event: row.event,
+      label: EVENT_LABELS[row.event] || "Account security update",
+      createdAt: new Date(row.createdAt).toISOString(),
+    })));
+  }));
+
+  app.post(securityPaths.revokeOtherSessions, ...sensitive, securityHandler(async (req, res) => {
+    const userId = (req.user as User).id;
+    await rateLimit(`revoke-sessions:${userId}`);
+    await withSecurity(userId, async (db) => {
+      await revokeSessions(db, userId, req.sessionID);
+      await audit(db, userId, "other_sessions_signed_out");
+    });
+    res.json({ ok: true });
+  }));
 }
 
 export async function replaceRecoveryCodes(db: import("pg").PoolClient, userId: number, codes: string[]) {

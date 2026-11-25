@@ -1,7 +1,13 @@
 import type { Express, RequestHandler } from "express";
 import { z } from "zod";
 import type { User } from "@shared/schema";
-import { contactDetailsPath, contactDetailsSchema } from "@shared/client-settings";
+import {
+  bankingPreferencesPath,
+  bankingPreferencesSchema,
+  contactDetailsPath,
+  contactDetailsSchema,
+  DEFAULT_BANKING_PREFERENCES,
+} from "@shared/client-settings";
 import { pool } from "./db";
 import { securityHandler, securityOrigin } from "./security/routes";
 import { audit, consumeFactor, rateLimit, withSecurity } from "./security/store";
@@ -12,6 +18,14 @@ export async function registerClientSettings(app: Express, authenticated: Reques
     user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     residential_address JSONB,
     mailing_address JSONB,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS client_banking_preferences (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    statement_delivery TEXT NOT NULL DEFAULT 'electronic',
+    transaction_alerts BOOLEAN NOT NULL DEFAULT TRUE,
+    login_alerts BOOLEAN NOT NULL DEFAULT TRUE,
+    session_timeout_minutes INTEGER NOT NULL DEFAULT 25,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`);
   app.get(contactDetailsPath, authenticated, securityHandler(async (req, res) => {
@@ -44,5 +58,41 @@ export async function registerClientSettings(app: Express, authenticated: Reques
     }
     const { currentPassword: _password, code: _code, ...details } = input;
     res.json(details);
+  }));
+  app.get(bankingPreferencesPath, authenticated, securityHandler(async (req, res) => {
+    const userId = (req.user as User).id;
+    const { rows: [row] } = await pool.query(
+      `SELECT statement_delivery, transaction_alerts, login_alerts, session_timeout_minutes
+       FROM client_banking_preferences WHERE user_id=$1`,
+      [userId],
+    );
+    if (!row) {
+      return void res.json(DEFAULT_BANKING_PREFERENCES);
+    }
+    res.json(bankingPreferencesSchema.parse({
+      statementDelivery: row.statement_delivery,
+      transactionAlerts: Boolean(row.transaction_alerts),
+      loginAlerts: Boolean(row.login_alerts),
+      sessionTimeoutMinutes: Number(row.session_timeout_minutes),
+    }));
+  }));
+  app.patch(bankingPreferencesPath, authenticated, securityOrigin, securityHandler(async (req, res) => {
+    const input = bankingPreferencesSchema.parse(req.body);
+    const userId = (req.user as User).id;
+    await withSecurity(userId, async (db) => {
+      await db.query(
+        `INSERT INTO client_banking_preferences(user_id, statement_delivery, transaction_alerts, login_alerts, session_timeout_minutes)
+         VALUES($1, $2, $3, $4, $5)
+         ON CONFLICT(user_id) DO UPDATE SET
+           statement_delivery=$2,
+           transaction_alerts=$3,
+           login_alerts=$4,
+           session_timeout_minutes=$5,
+           updated_at=NOW()`,
+        [userId, input.statementDelivery, input.transactionAlerts, input.loginAlerts, input.sessionTimeoutMinutes],
+      );
+      await audit(db, userId, "banking_preferences_updated");
+    });
+    res.json(input);
   }));
 }

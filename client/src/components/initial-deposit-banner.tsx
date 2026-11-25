@@ -52,7 +52,7 @@ export function InitialDepositBanner({
                 <span aria-hidden="true"> · </span>
                 <span>
                   Selected:{" "}
-                  <span className="font-mono font-semibold tabular-nums text-white">
+                  <span className="font-sans font-semibold tabular-nums text-white">
                     {formatOnboardingLabel(selectedInitialDeposit)}
                   </span>
                 </span>

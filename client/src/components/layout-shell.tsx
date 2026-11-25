@@ -18,6 +18,9 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { useState, useCallback, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { bankingPreferencesPath, DEFAULT_BANKING_PREFERENCES, type BankingPreferences } from "@shared/client-settings";
+import { apiRequest } from "@/lib/queryClient";
 
 export function LayoutShell({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();
@@ -27,6 +30,13 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
   const { isUnderLiquidation, statusUnavailable, isError: liquidationError, refetch: refetchLiquidation } = useActiveLiquidation();
   const [fundsDialogOpen, setFundsDialogOpen] = useState(false);
   const fundsActionOrigin = useRef<HTMLElement | null>(null);
+  const preferencesQuery = useQuery<BankingPreferences>({
+    queryKey: [bankingPreferencesPath],
+    queryFn: async () => (await apiRequest("GET", bankingPreferencesPath)).json(),
+    enabled: Boolean(user),
+    staleTime: 60_000,
+    retry: false,
+  });
   const feedback = statusUnavailable
     ? { title: "Portfolio transfer status unavailable", message: LIQUIDATION_STATUS_UNAVAILABLE.message, retry: true }
     : fundsActionFeedback(access.blocked, access.data, access.isError);
@@ -46,7 +56,8 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
     logout.mutate();
   }, [logout]);
 
-  const { showWarning, secondsLeft, dismiss } = useInactivityLogout(handleAutoLogout);
+  const sessionMinutes = preferencesQuery.data?.sessionTimeoutMinutes ?? DEFAULT_BANKING_PREFERENCES.sessionTimeoutMinutes;
+  const { showWarning, secondsLeft, dismiss } = useInactivityLogout(handleAutoLogout, sessionMinutes);
 
   return (
     <>

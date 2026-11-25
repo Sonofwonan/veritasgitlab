@@ -137,7 +137,7 @@ export default function AccountDetailPage() {
                 ) : unpaidFees > 0 ? (
                   <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-t border-border/70 pt-3">
                     <p className="text-sm text-muted-foreground">Unpaid fees</p>
-                    <p className="whitespace-nowrap font-mono font-semibold tabular-nums" data-testid="text-total-fee-debt">{money(unpaidFees)}</p>
+                    <p className="whitespace-nowrap font-sans font-semibold tabular-nums" data-testid="text-total-fee-debt">{money(unpaidFees)}</p>
                   </div>
                 ) : null}
               </div>
@@ -276,14 +276,14 @@ export default function AccountDetailPage() {
                 </div>
                 <div className="flex min-w-0 flex-col gap-1 border-b py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                   <span className="shrink-0 text-sm text-muted-foreground">Amount</span>
-                  <span className={cn("whitespace-nowrap font-mono text-lg font-semibold tabular-nums sm:text-right", selectedTxn?.status === 'pending' ? "text-red-700 dark:text-red-300" : (selectedTxn?.toAccountId === accountId ? "text-green-700 dark:text-green-300" : "text-red-700 dark:text-red-300"))}>
+                  <span className={cn("whitespace-nowrap font-sans text-lg font-semibold tabular-nums sm:text-right", selectedTxn?.status === 'pending' ? "text-red-700 dark:text-red-300" : (selectedTxn?.toAccountId === accountId ? "text-green-700 dark:text-green-300" : "text-red-700 dark:text-red-300"))}>
                     {selectedTxn && `${selectedTxn.toAccountId === accountId ? "+" : "-"}${money(selectedTxn.amount)}`}
                   </span>
                 </div>
                 {(selectedTxn?.cashPostings as CashPosting[] | undefined)?.filter(posting => posting.accountId === accountId).map(posting => (
                   <div key={posting.accountId} className="flex min-w-0 flex-col gap-1 border-b py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                     <span className="shrink-0 text-sm text-muted-foreground">Balance after transaction</span>
-                    <span className="font-mono text-sm font-semibold tabular-nums sm:text-right">{money(posting.balanceAfter)}</span>
+                    <span className="font-sans text-sm font-semibold tabular-nums sm:text-right">{money(posting.balanceAfter)}</span>
                   </div>
                 ))}
                 <div className="flex min-w-0 flex-col gap-1 border-b py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">

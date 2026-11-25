@@ -19,6 +19,23 @@ export const contactDetailsSchema = z.object({
 export type Address = z.infer<typeof addressSchema>;
 export type ContactDetails = z.infer<typeof contactDetailsSchema>;
 export const contactDetailsPath = "/api/client/contact-details";
+export const bankingPreferencesPath = "/api/client/preferences";
+
+export const bankingPreferencesSchema = z.object({
+  statementDelivery: z.enum(["electronic", "electronic_and_mail"]),
+  transactionAlerts: z.boolean(),
+  loginAlerts: z.boolean(),
+  sessionTimeoutMinutes: z.union([z.literal(5), z.literal(10), z.literal(15), z.literal(25)]),
+}).strict();
+
+export type BankingPreferences = z.infer<typeof bankingPreferencesSchema>;
+export const DEFAULT_BANKING_PREFERENCES: BankingPreferences = {
+  statementDelivery: "electronic",
+  transactionAlerts: true,
+  loginAlerts: true,
+  sessionTimeoutMinutes: 25,
+};
+
 export type RecoveryRequest = {
   id: number;
   status: "pending" | "issued" | "rejected";

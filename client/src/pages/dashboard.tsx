@@ -174,7 +174,7 @@ export default function DashboardPage() {
                       {row.val}
                     </span>
                   ) : (
-                    <span className={cn('min-w-0 text-right font-semibold [overflow-wrap:anywhere]', row.accent && 'font-mono text-slate-900 dark:text-foreground text-base tabular-nums')}>
+                    <span className={cn('min-w-0 text-right font-semibold [overflow-wrap:anywhere]', row.accent && 'font-sans text-slate-900 dark:text-foreground text-base tabular-nums')}>
                       {row.val}
                     </span>
                   )}
@@ -185,7 +185,7 @@ export default function DashboardPage() {
                   <span className="min-w-0 text-xs font-medium text-slate-500 dark:text-muted-foreground [overflow-wrap:anywhere]">
                     Balance after transaction · {posting.accountName}
                   </span>
-                  <span className="shrink-0 font-mono font-semibold tabular-nums text-slate-900 dark:text-foreground">
+                  <span className="shrink-0 font-sans font-semibold tabular-nums text-slate-900 dark:text-foreground">
                     {fmt(posting.balanceAfter)}
                   </span>
                 </div>
@@ -206,13 +206,19 @@ export default function DashboardPage() {
         </Dialog>
 
         {/* ── Greeting Header ─────────────────────────────────────────────── */}
-        <div className="flex flex-wrap items-baseline justify-between gap-2 px-0.5">
+        <div className="flex flex-wrap items-end justify-between gap-2 px-0.5">
           <div>
-            <h1 className="font-serif text-2xl sm:text-[28px] font-medium tracking-tight text-slate-900 dark:text-foreground">
+            <h1 className="font-serif text-[26px] sm:text-[30px] font-semibold tracking-tight text-slate-900 dark:text-foreground">
               {getGreeting()}{firstName ? `, ${firstName}` : ""}
             </h1>
-            <p className="text-xs text-slate-500 dark:text-muted-foreground mt-0.5">
-              Private Banking Overview{user?.clientRef ? ` · Client Ref ${user.clientRef}` : ""}
+            <p className="text-xs text-slate-500 dark:text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-1.5">
+              <span>Private Banking Overview</span>
+              {user?.clientRef && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span>Client Ref <span className="font-mono text-[11px] font-medium text-slate-700 dark:text-foreground">{user.clientRef}</span></span>
+                </>
+              )}
             </p>
           </div>
         </div>
@@ -220,7 +226,7 @@ export default function DashboardPage() {
         {/* ── Portfolio Summary Card (Crisp White Private Bank) ───────────── */}
         <section
           aria-label="Portfolio summary"
-          className="bg-white dark:bg-card border border-slate-200/90 dark:border-border rounded-lg shadow-xs overflow-hidden"
+          className="bg-white dark:bg-card border border-slate-200/90 dark:border-border border-t-2 border-t-[#C6A15B]/80 rounded-lg shadow-sm overflow-hidden"
         >
           <div className="px-5 sm:px-7 py-5 sm:py-6 border-b border-slate-100 dark:border-border">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-5">
@@ -343,7 +349,7 @@ export default function DashboardPage() {
                 <p className="text-[11px] font-medium text-slate-500 dark:text-muted-foreground mb-0.5">{label}</p>
                 <p
                   className={cn(
-                    "font-mono font-semibold tabular-nums text-sm [overflow-wrap:anywhere]",
+                    "font-sans font-semibold tabular-nums text-sm [overflow-wrap:anywhere]",
                     highlightDebt ? "text-rose-700 dark:text-rose-400" : "text-slate-900 dark:text-foreground"
                   )}
                   data-testid={testId}
@@ -518,7 +524,7 @@ export default function DashboardPage() {
                     <div>
                       <p className="text-[11px] text-slate-500 dark:text-muted-foreground mb-0.5">Balance</p>
                       <p className={cn(
-                        "font-mono text-base sm:text-lg font-semibold tabular-nums",
+                        "font-sans text-base sm:text-lg font-semibold tracking-tight tabular-nums",
                         overdrawn ? "text-rose-700 dark:text-rose-400" : "text-slate-900 dark:text-foreground"
                       )}>
                         <span className="[overflow-wrap:anywhere]" data-testid={`dash-account-balance-${acc.id}`}>
@@ -702,15 +708,15 @@ export default function DashboardPage() {
                         </div>
                         <div className="min-w-0 sm:text-right">
                           <p className="text-[11px] text-slate-500 sm:hidden mb-0.5">Shares</p>
-                          <p className="font-mono text-xs tabular-nums text-slate-600 dark:text-muted-foreground [overflow-wrap:anywhere]">{Number(inv.shares).toFixed(4)}</p>
+                          <p className="font-sans text-xs tabular-nums text-slate-600 dark:text-muted-foreground [overflow-wrap:anywhere]">{Number(inv.shares).toFixed(4)}</p>
                         </div>
                         <div className="min-w-0 sm:text-right">
                           <p className="text-[11px] text-slate-500 sm:hidden mb-0.5">Avg Cost</p>
-                          <p className="font-mono text-xs tabular-nums font-medium text-slate-900 dark:text-foreground [overflow-wrap:anywhere]">{fmt(Number(inv.purchasePrice))}</p>
+                          <p className="font-sans text-xs tabular-nums font-medium text-slate-900 dark:text-foreground [overflow-wrap:anywhere]">{fmt(Number(inv.purchasePrice))}</p>
                         </div>
                         <div className="min-w-0 sm:text-right">
                           <p className="text-[11px] text-slate-500 sm:hidden mb-0.5">Stored Value</p>
-                          <p className="font-mono text-xs tabular-nums font-semibold text-slate-900 dark:text-foreground [overflow-wrap:anywhere]">{fmt(mktVal)}</p>
+                          <p className="font-sans text-xs tabular-nums font-semibold text-slate-900 dark:text-foreground [overflow-wrap:anywhere]">{fmt(mktVal)}</p>
                         </div>
                       </div>
                     );
@@ -718,7 +724,7 @@ export default function DashboardPage() {
                 </div>
                 <div className="mt-auto grid min-w-0 grid-cols-2 sm:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,1fr))] gap-2 px-4 sm:px-6 py-3 bg-slate-50/75 dark:bg-muted/20 items-center border-t border-slate-200/80 dark:border-border">
                   <p className="text-xs font-semibold text-slate-600 dark:text-muted-foreground">Total</p>
-                  <p className="font-mono text-sm font-semibold tabular-nums text-right text-slate-900 dark:text-foreground [overflow-wrap:anywhere] sm:col-start-4">{fmt(investValue)}</p>
+                  <p className="font-sans text-sm font-semibold tabular-nums text-right text-slate-900 dark:text-foreground [overflow-wrap:anywhere] sm:col-start-4">{fmt(investValue)}</p>
                 </div>
               </div>
             ) : (
