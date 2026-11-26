@@ -76,10 +76,10 @@ function parseTabFromLocation(needsInitialDeposit: boolean): TransferTab {
 function StatusLabel({ status }: { status: string }) {
   const tone =
     status === "completed" || status === "approved"
-      ? "border-emerald-600/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+      ? "text-emerald-700 dark:text-emerald-400"
       : status === "failed" || status === "rejected"
-        ? "border-rose-600/30 bg-rose-500/10 text-rose-700 dark:text-rose-300"
-        : "border-amber-600/30 bg-amber-500/10 text-amber-800 dark:text-amber-300";
+        ? "text-rose-700 dark:text-rose-400"
+        : "text-amber-700 dark:text-amber-400";
   const label =
     status === "pending_approval"
       ? "Pending Verification"
@@ -89,7 +89,7 @@ function StatusLabel({ status }: { status: string }) {
           ? "Under Review"
           : status.replace(/_/g, " ");
   return (
-    <span className={`inline-flex items-center rounded-sm border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider capitalize whitespace-nowrap ${tone}`}>
+    <span className={`text-xs font-semibold capitalize whitespace-nowrap ${tone}`}>
       {label}
     </span>
   );
@@ -390,26 +390,36 @@ export default function TransfersPage() {
         { id: "institutional", label: "Institutional", icon: Building2 },
       ];
 
+  const fieldClass = "w-full h-10 rounded-md border border-slate-200 dark:border-border bg-white dark:bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring";
+  const labelClass = "text-xs font-medium text-slate-600 dark:text-muted-foreground block";
+
   return (
     <LayoutShell>
       <FundsAccessNotice />
-      <div className="max-w-5xl mx-auto space-y-6">
-        <div className="flex items-center gap-2.5">
-          <h1 className="text-2xl font-bold font-display">
-            {needsInitialDeposit ? "Account Activation" : "Transfers"}
-          </h1>
-          <InfoTip
-            label="Transfer overview"
-            content={
-              needsInitialDeposit
-                ? "Submit your initial funding deposit for administrative verification to unlock wires, additional accounts, and investing."
-                : "Initiate domestic or international SWIFT wires, transfer funds between accounts, or request an institutional portfolio transfer."
-            }
-          />
-        </div>
+      <div className="space-y-5">
+        <header className="px-0.5">
+          <div className="flex items-center gap-2.5">
+            <h1 className="font-serif text-[28px] sm:text-[32px] font-semibold tracking-tight text-slate-900 dark:text-foreground">
+              {needsInitialDeposit ? "Account Activation" : "Transfers & Wires"}
+            </h1>
+            <InfoTip
+              label="Transfer overview"
+              content={
+                needsInitialDeposit
+                  ? "Submit your initial funding deposit for administrative verification to unlock wires, additional accounts, and investing."
+                  : "Initiate domestic or international SWIFT wires, transfer funds between accounts, or request an institutional portfolio transfer."
+              }
+            />
+          </div>
+          <p className="mt-1 text-xs text-slate-500 dark:text-muted-foreground">
+            {needsInitialDeposit
+              ? "Complete your initial funding deposit to unlock external wires and investing"
+              : "Domestic and SWIFT wire payments, internal transfers, and institutional custody movements"}
+          </p>
+        </header>
 
         {/* Segmented Navigation Tabs */}
-        <div className="flex items-center gap-1 overflow-x-auto border-b border-border pb-0" role="tablist" aria-label="Transfer channels">
+        <div className="flex items-center gap-1 overflow-x-auto border-b border-slate-200 dark:border-border" role="tablist" aria-label="Transfer channels">
           {tabs.map(({ id, label, icon: Icon }) => {
             const active = activeTab === id;
             const lockedTab = needsInitialDeposit && id !== "deposit";
@@ -424,13 +434,13 @@ export default function TransfersPage() {
                 data-testid={`tab-transfer-${id}`}
                 className={`inline-flex items-center gap-2 px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap shrink-0 ${
                   active
-                    ? "border-primary text-foreground"
+                    ? "border-[#0B2218] dark:border-primary text-slate-900 dark:text-foreground"
                     : lockedTab
-                      ? "border-transparent text-muted-foreground/45 cursor-not-allowed"
-                      : "border-transparent text-muted-foreground hover:text-foreground"
+                      ? "border-transparent text-slate-400 dark:text-muted-foreground/45 cursor-not-allowed"
+                      : "border-transparent text-slate-500 dark:text-muted-foreground hover:text-slate-900 dark:hover:text-foreground"
                 }`}
               >
-                {lockedTab ? <Lock className="w-3 h-3" /> : <Icon className="w-3.5 h-3.5" />}
+                {lockedTab ? <Lock className="w-3.5 h-3.5" /> : <Icon className="w-3.5 h-3.5" />}
                 {label}
               </button>
             );
@@ -439,12 +449,12 @@ export default function TransfersPage() {
 
         {/* ── TAB 1: WIRE & INTERNATIONAL TRANSFERS (Activated clients only) ── */}
         {!needsInitialDeposit && activeTab === "wire" && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,0.9fr)] gap-6 items-start">
-              <Card className="border border-border/80 shadow-sm">
-                <CardHeader className="pb-4">
-                  <CardTitle className="text-base font-semibold flex items-center gap-2">
-                    <Send className="w-4 h-4 text-primary" />
+          <div className="space-y-5">
+            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,0.9fr)] gap-5 items-start">
+              <Card className="border border-slate-200/90 dark:border-border bg-white dark:bg-card rounded-lg shadow-xs overflow-hidden">
+                <CardHeader className="pb-4 border-b border-slate-100 dark:border-border bg-slate-50/70 dark:bg-muted/20 px-5 py-4">
+                  <CardTitle className="text-sm font-semibold text-slate-900 dark:text-foreground flex items-center gap-2">
+                    <Send className="w-4 h-4 text-[#0B2218] dark:text-primary" />
                     Wire Transfer
                     <InfoTip
                       label="Wire transfer policy"
@@ -452,18 +462,18 @@ export default function TransfersPage() {
                     />
                   </CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-5 sm:p-6">
                   <form onSubmit={handleSubmitWire} className="space-y-4">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-1.5">
-                        <label htmlFor="wire-source-account" className="label-caps text-muted-foreground block">
+                        <label htmlFor="wire-source-account" className={labelClass}>
                           From Account
                         </label>
                         <select
                           id="wire-source-account"
                           value={wireSourceId}
                           onChange={e => setWireSourceId(e.target.value)}
-                          className="vw-input text-foreground"
+                          className={fieldClass}
                           data-testid="select-wire-source"
                           required
                         >
@@ -477,14 +487,14 @@ export default function TransfersPage() {
                       </div>
 
                       <div className="space-y-1.5">
-                        <label htmlFor="wire-channel" className="label-caps text-muted-foreground block">
+                        <label htmlFor="wire-channel" className={labelClass}>
                           Channel
                         </label>
                         <select
                           id="wire-channel"
                           value={wireType}
                           onChange={e => setWireType(e.target.value === "international" ? "international" : "domestic")}
-                          className="vw-input text-foreground"
+                          className={fieldClass}
                           data-testid="select-wire-channel"
                         >
                           <option value="domestic">Domestic Wire</option>
@@ -495,13 +505,13 @@ export default function TransfersPage() {
 
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between gap-2">
-                        <label htmlFor="wire-beneficiary" className="label-caps text-muted-foreground">
+                        <label htmlFor="wire-beneficiary" className={labelClass}>
                           Beneficiary
                         </label>
                         <button
                           type="button"
                           onClick={openAddBeneficiaryModal}
-                          className="text-xs font-medium text-primary hover:underline whitespace-nowrap shrink-0"
+                          className="text-xs font-medium text-[#0B2218] dark:text-primary hover:underline whitespace-nowrap shrink-0"
                           data-testid="button-open-add-beneficiary"
                         >
                           + Add Beneficiary
@@ -511,7 +521,7 @@ export default function TransfersPage() {
                         id="wire-beneficiary"
                         value={wirePayeeId}
                         onChange={e => setWirePayeeId(e.target.value)}
-                        className="vw-input text-foreground"
+                        className={fieldClass}
                         data-testid="select-wire-beneficiary"
                         required
                       >
@@ -540,7 +550,7 @@ export default function TransfersPage() {
                     <div className={wireType === "international" ? "grid grid-cols-1 sm:grid-cols-2 gap-4" : ""}>
                       {wireType === "international" && (
                         <div className="space-y-1.5">
-                          <label htmlFor="wire-currency" className="label-caps text-muted-foreground block">
+                          <label htmlFor="wire-currency" className={labelClass}>
                             Settlement Currency
                           </label>
                           <select
@@ -549,7 +559,7 @@ export default function TransfersPage() {
                             onChange={e => {
                               if (isBalanceCurrency(e.target.value)) setWireTargetCurrency(e.target.value);
                             }}
-                            className="vw-input text-foreground"
+                            className={fieldClass}
                             data-testid="select-wire-currency"
                           >
                             {BALANCE_CURRENCIES.map(code => (
@@ -562,7 +572,7 @@ export default function TransfersPage() {
                       )}
 
                       <div className="space-y-1.5">
-                        <label htmlFor="wire-amount" className="label-caps text-muted-foreground block">
+                        <label htmlFor="wire-amount" className={labelClass}>
                           Amount ({displayCurrency})
                         </label>
                         <Input
@@ -572,7 +582,7 @@ export default function TransfersPage() {
                           value={wireAmount}
                           onChange={e => setWireAmount(e.target.value)}
                           placeholder="0.00"
-                          className="font-mono tabular-nums"
+                          className="h-10 rounded-md border-slate-200 dark:border-border font-sans tabular-nums"
                           data-testid="input-wire-amount"
                           required
                         />
@@ -581,8 +591,8 @@ export default function TransfersPage() {
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-1.5">
-                        <label htmlFor="wire-reference" className="label-caps text-muted-foreground block">
-                          Reference <span className="normal-case text-muted-foreground">(optional)</span>
+                        <label htmlFor="wire-reference" className={labelClass}>
+                          Reference <span className="text-slate-400 dark:text-muted-foreground/70">(optional)</span>
                         </label>
                         <Input
                           id="wire-reference"
@@ -590,12 +600,13 @@ export default function TransfersPage() {
                           value={wireReference}
                           onChange={e => setWireReference(e.target.value)}
                           placeholder="INV-2026-041"
+                          className="h-10 rounded-md border-slate-200 dark:border-border font-mono text-xs"
                           data-testid="input-wire-reference"
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <label htmlFor="wire-purpose" className="label-caps text-muted-foreground block">
-                          Purpose <span className="normal-case text-muted-foreground">(optional)</span>
+                        <label htmlFor="wire-purpose" className={labelClass}>
+                          Purpose <span className="text-slate-400 dark:text-muted-foreground/70">(optional)</span>
                         </label>
                         <Input
                           id="wire-purpose"
@@ -603,6 +614,7 @@ export default function TransfersPage() {
                           value={wireDescription}
                           onChange={e => setWireDescription(e.target.value)}
                           placeholder="Optional memo"
+                          className="h-10 rounded-md border-slate-200 dark:border-border"
                           data-testid="input-wire-description"
                         />
                       </div>
@@ -613,7 +625,7 @@ export default function TransfersPage() {
                         type="submit"
                         data-funds-action=""
                         disabled={access.blocked || paymentMutation.isPending || !wireSourceId || !wirePayeeId || selectedPayee?.status === "rejected"}
-                        className="whitespace-nowrap shrink-0"
+                        className="bg-[#0B2218] hover:bg-[#133526] text-white rounded-md whitespace-nowrap shrink-0"
                         data-testid="button-submit-wire"
                       >
                         {paymentMutation.isPending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
@@ -625,10 +637,10 @@ export default function TransfersPage() {
               </Card>
 
               {/* Saved Beneficiaries Sidebar */}
-              <Card className="border border-border/80 shadow-sm">
-                <CardHeader className="pb-3 flex flex-row items-center justify-between gap-2 space-y-0">
+              <Card className="border border-slate-200/90 dark:border-border bg-white dark:bg-card rounded-lg shadow-xs overflow-hidden">
+                <CardHeader className="border-b border-slate-100 dark:border-border bg-slate-50/70 dark:bg-muted/20 px-5 py-3.5 flex flex-row items-center justify-between gap-2 space-y-0">
                   <div className="flex items-center gap-2">
-                    <CardTitle className="text-base font-semibold">Beneficiaries</CardTitle>
+                    <CardTitle className="text-sm font-semibold text-slate-900 dark:text-foreground">Beneficiaries</CardTitle>
                     <InfoTip
                       label="Beneficiary review"
                       content="Recipients undergo compliance review before outgoing wires can be released."
@@ -639,34 +651,34 @@ export default function TransfersPage() {
                     size="sm"
                     variant="outline"
                     onClick={openAddBeneficiaryModal}
-                    className="whitespace-nowrap shrink-0 text-xs gap-1"
+                    className="rounded-md border-slate-200 dark:border-border bg-white dark:bg-card whitespace-nowrap shrink-0 text-xs gap-1"
                     data-testid="button-add-beneficiary-card"
                   >
                     <Plus className="w-3.5 h-3.5" /> Add
                   </Button>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-0">
                   {loadingPayees ? (
-                    <p className="text-xs text-muted-foreground py-4">Loading…</p>
+                    <p className="text-xs text-slate-500 dark:text-muted-foreground p-5">Loading…</p>
                   ) : payees.length === 0 ? (
-                    <div className="py-8 text-center space-y-2">
-                      <Globe2 className="w-6 h-6 text-muted-foreground/40 mx-auto" />
-                      <p className="text-xs text-muted-foreground">No beneficiaries saved.</p>
+                    <div className="py-10 px-5 text-center space-y-2">
+                      <Globe2 className="w-6 h-6 text-slate-300 dark:text-muted-foreground/40 mx-auto" />
+                      <p className="text-xs text-slate-500 dark:text-muted-foreground">No beneficiaries saved.</p>
                     </div>
                   ) : (
-                    <div className="divide-y divide-border/60">
+                    <div className="divide-y divide-slate-100 dark:divide-border/60">
                       {payees.map((p: any) => (
-                        <div key={p.id} className="py-3 flex items-start justify-between gap-3" data-testid={`beneficiary-row-${p.id}`}>
+                        <div key={p.id} className="px-5 py-3.5 flex items-start justify-between gap-3" data-testid={`beneficiary-row-${p.id}`}>
                           <div className="min-w-0 space-y-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="text-sm font-semibold text-foreground">{p.name}</span>
+                            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
+                              <span className="text-sm font-semibold text-slate-900 dark:text-foreground">{p.name}</span>
                               <StatusLabel status={p.status} />
                             </div>
-                            <p className="text-xs text-muted-foreground">
+                            <p className="text-xs text-slate-500 dark:text-muted-foreground">
                               {p.bankName || "—"}
                               {p.country && p.country !== "Domestic" ? ` · ${p.country} (${p.currency || displayCurrency})` : " · Domestic"}
                             </p>
-                            <p className="text-[11px] font-mono text-muted-foreground">
+                            <p className="text-xs font-mono text-slate-500 dark:text-muted-foreground">
                               Acct {maskAccountNumber(p.accountNumber || "")} {p.routingNumber ? `· ${p.routingNumber}` : ""}
                             </p>
                           </div>
@@ -675,7 +687,7 @@ export default function TransfersPage() {
                             onClick={() => deletePayee.mutate(p.id)}
                             disabled={deletePayee.isPending}
                             aria-label={`Remove beneficiary ${p.name}`}
-                            className="text-muted-foreground hover:text-destructive p-1.5 transition-colors shrink-0"
+                            className="text-slate-400 hover:text-destructive p-1.5 transition-colors shrink-0"
                             data-testid={`button-delete-beneficiary-${p.id}`}
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -689,34 +701,34 @@ export default function TransfersPage() {
             </div>
 
             {/* Wire Request History */}
-            <Card className="border border-border/80 shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base font-semibold flex items-center gap-2">
+            <Card className="border border-slate-200/90 dark:border-border bg-white dark:bg-card rounded-lg shadow-xs overflow-hidden">
+              <CardHeader className="border-b border-slate-100 dark:border-border bg-slate-50/70 dark:bg-muted/20 px-5 py-3.5">
+                <CardTitle className="text-sm font-semibold text-slate-900 dark:text-foreground flex items-center gap-2">
                   Wire Activity
                   <InfoTip label="Wire activity details" content="Submitted domestic and international wire requests." />
                 </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-0">
                 {loadingTxns ? (
-                  <p className="text-xs text-muted-foreground py-4">Loading…</p>
+                  <p className="text-xs text-slate-500 dark:text-muted-foreground p-5">Loading…</p>
                 ) : wireHistory.length === 0 ? (
-                  <p className="text-xs text-muted-foreground py-6 text-center">No wire transfers yet.</p>
+                  <p className="text-xs text-slate-500 dark:text-muted-foreground py-8 text-center">No wire transfers yet.</p>
                 ) : (
-                  <div className="divide-y divide-border/60">
+                  <div className="divide-y divide-slate-100 dark:divide-border/60">
                     {wireHistory.map((t: any) => (
-                      <div key={t.id} className="py-3.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2" data-testid={`wire-history-row-${t.id}`}>
+                      <div key={t.id} className="px-5 py-3.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2" data-testid={`wire-history-row-${t.id}`}>
                         <div className="min-w-0 space-y-0.5">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="font-mono text-xs text-muted-foreground">WT-{t.id}</span>
-                            <span className="text-sm font-medium text-foreground">{t.description || "Wire Transfer"}</span>
+                          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
+                            <span className="font-mono text-xs text-slate-500 dark:text-muted-foreground">WT-{t.id}</span>
+                            <span className="text-sm font-medium text-slate-900 dark:text-foreground">{t.description || "Wire Transfer"}</span>
                             <StatusLabel status={t.status} />
                           </div>
-                          <p className="text-xs text-muted-foreground font-mono">
+                          <p className="text-xs text-slate-500 dark:text-muted-foreground font-mono">
                             {transactionDate(t.createdAt, true)}
                             {t.evidenceRef ? ` · Ref: ${t.evidenceRef}` : ""}
                           </p>
                         </div>
-                        <p className="font-mono text-sm font-semibold tabular-nums text-foreground whitespace-nowrap shrink-0">
+                        <p className="font-sans text-sm font-semibold tabular-nums text-slate-900 dark:text-foreground whitespace-nowrap shrink-0">
                           {formatBalance(t.amount, displayCurrency)}
                         </p>
                       </div>
@@ -730,12 +742,12 @@ export default function TransfersPage() {
 
         {/* ── TAB 2: INITIAL DEPOSIT ACTIVATION (Unactivated clients only) ───── */}
         {needsInitialDeposit && activeTab === "deposit" && (
-          <div className="space-y-6">
-            <Card className="border border-border/80 shadow-sm">
-              <CardHeader className="pb-4">
+          <div className="space-y-5">
+            <Card className="border border-slate-200/90 dark:border-border bg-white dark:bg-card rounded-lg shadow-xs overflow-hidden">
+              <CardHeader className="border-b border-slate-100 dark:border-border bg-slate-50/70 dark:bg-muted/20 px-5 py-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <CardTitle className="text-base font-semibold flex items-center gap-2">
-                    <Landmark className="w-4 h-4 text-primary" />
+                  <CardTitle className="text-sm font-semibold text-slate-900 dark:text-foreground flex items-center gap-2">
+                    <Landmark className="w-4 h-4 text-[#0B2218] dark:text-primary" />
                     {initialDepositPending ? "Initial Deposit Under Review" : "Initial Deposit"}
                     <InfoTip
                       label="Initial deposit rules"
@@ -743,19 +755,19 @@ export default function TransfersPage() {
                     />
                   </CardTitle>
                   {user?.selectedInitialDeposit && (
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-xs text-slate-500 dark:text-muted-foreground">
                       Selected:{" "}
-                      <span className="font-mono font-semibold text-foreground">
+                      <span className="font-sans font-semibold tabular-nums text-slate-900 dark:text-foreground">
                         {formatOnboardingLabel(user.selectedInitialDeposit)}
                       </span>
                     </span>
                   )}
                 </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-5 sm:p-6">
                 {initialDepositPending ? (
-                  <div className="py-4 space-y-4">
-                    <div className="flex items-center gap-2 text-sm font-medium text-amber-700 dark:text-amber-300">
+                  <div className="py-3 space-y-4">
+                    <div className="flex items-center gap-2 text-sm font-medium text-amber-800 dark:text-amber-300">
                       <Clock className="w-4 h-4 shrink-0" />
                       <span>Pending administrative verification. Your account unlocks automatically once confirmed.</span>
                     </div>
@@ -765,14 +777,14 @@ export default function TransfersPage() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {(accounts?.length ?? 0) > 1 && (
                         <div className="space-y-1.5">
-                          <label htmlFor="deposit-destination" className="label-caps text-muted-foreground block">
+                          <label htmlFor="deposit-destination" className={labelClass}>
                             Account
                           </label>
                           <select
                             id="deposit-destination"
                             value={depositAccountId}
                             onChange={e => setDepositAccountId(e.target.value)}
-                            className="vw-input text-foreground"
+                            className={fieldClass}
                             data-testid="select-deposit-account"
                             required
                           >
@@ -786,14 +798,14 @@ export default function TransfersPage() {
                       )}
 
                       <div className="space-y-1.5">
-                        <label htmlFor="deposit-method" className="label-caps text-muted-foreground block">
+                        <label htmlFor="deposit-method" className={labelClass}>
                           Method
                         </label>
                         <select
                           id="deposit-method"
                           value={depositMethod}
                           onChange={e => setDepositMethod(e.target.value)}
-                          className="vw-input text-foreground"
+                          className={fieldClass}
                           data-testid="select-deposit-method"
                         >
                           {FUNDING_METHODS.map(m => (
@@ -803,7 +815,7 @@ export default function TransfersPage() {
                       </div>
 
                       <div className="space-y-1.5">
-                        <label htmlFor="deposit-bank" className="label-caps text-muted-foreground block">
+                        <label htmlFor="deposit-bank" className={labelClass}>
                           Originating Bank
                         </label>
                         <Input
@@ -812,13 +824,14 @@ export default function TransfersPage() {
                           value={depositBankName}
                           onChange={e => setDepositBankName(e.target.value)}
                           placeholder="e.g. RBC, HSBC, Chase"
+                          className="h-10 rounded-md border-slate-200 dark:border-border"
                           data-testid="input-deposit-bank"
                           required
                         />
                       </div>
 
                       <div className="space-y-1.5">
-                        <label htmlFor="deposit-amount" className="label-caps text-muted-foreground block">
+                        <label htmlFor="deposit-amount" className={labelClass}>
                           Amount ({displayCurrency})
                         </label>
                         <Input
@@ -828,15 +841,15 @@ export default function TransfersPage() {
                           value={depositAmount}
                           onChange={e => setDepositAmount(e.target.value)}
                           placeholder="0.00"
-                          className="font-mono tabular-nums"
+                          className="h-10 rounded-md border-slate-200 dark:border-border font-sans tabular-nums"
                           data-testid="input-deposit-amount"
                           required
                         />
                       </div>
 
                       <div className="space-y-1.5">
-                        <label htmlFor="deposit-ref" className="label-caps text-muted-foreground block">
-                          Reference <span className="normal-case text-muted-foreground">(optional)</span>
+                        <label htmlFor="deposit-ref" className={labelClass}>
+                          Reference <span className="text-slate-400 dark:text-muted-foreground/70">(optional)</span>
                         </label>
                         <Input
                           id="deposit-ref"
@@ -844,6 +857,7 @@ export default function TransfersPage() {
                           value={depositReference}
                           onChange={e => setDepositReference(e.target.value)}
                           placeholder="Trace or wire reference"
+                          className="h-10 rounded-md border-slate-200 dark:border-border font-mono text-xs"
                           data-testid="input-deposit-reference"
                         />
                       </div>
@@ -853,7 +867,7 @@ export default function TransfersPage() {
                       <Button
                         type="submit"
                         disabled={transferMutation.isPending || !depositAmount.trim()}
-                        className="whitespace-nowrap shrink-0"
+                        className="bg-[#0B2218] hover:bg-[#133526] text-white rounded-md whitespace-nowrap shrink-0"
                         data-testid="button-submit-deposit"
                       >
                         {transferMutation.isPending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
@@ -866,28 +880,28 @@ export default function TransfersPage() {
             </Card>
 
             {depositHistory.length > 0 && (
-              <Card className="border border-border/80 shadow-sm">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base font-semibold">Deposit Status</CardTitle>
+              <Card className="border border-slate-200/90 dark:border-border bg-white dark:bg-card rounded-lg shadow-xs overflow-hidden">
+                <CardHeader className="border-b border-slate-100 dark:border-border bg-slate-50/70 dark:bg-muted/20 px-5 py-3.5">
+                  <CardTitle className="text-sm font-semibold text-slate-900 dark:text-foreground">Deposit Status</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <div className="divide-y divide-border/60">
+                <CardContent className="p-0">
+                  <div className="divide-y divide-slate-100 dark:divide-border/60">
                     {depositHistory.map((t: any) => {
                       const dest = accountById.get(t.toAccountId);
                       return (
-                        <div key={t.id} className="py-3.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2" data-testid={`deposit-history-row-${t.id}`}>
+                        <div key={t.id} className="px-5 py-3.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2" data-testid={`deposit-history-row-${t.id}`}>
                           <div className="min-w-0 space-y-0.5">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="font-mono text-xs text-muted-foreground">DEP-{t.id}</span>
-                              <span className="text-sm font-medium text-foreground">{t.description || "Initial Deposit"}</span>
+                            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
+                              <span className="font-mono text-xs text-slate-500 dark:text-muted-foreground">DEP-{t.id}</span>
+                              <span className="text-sm font-medium text-slate-900 dark:text-foreground">{t.description || "Initial Deposit"}</span>
                               <StatusLabel status={t.status} />
                             </div>
-                            <p className="text-xs text-muted-foreground">
+                            <p className="text-xs text-slate-500 dark:text-muted-foreground">
                               {dest ? accountLabel(dest) : "Account"} ·{" "}
                               <span className="font-mono">{transactionDate(t.createdAt, true)}</span>
                             </p>
                           </div>
-                          <p className="font-mono text-sm font-semibold tabular-nums text-emerald-700 dark:text-emerald-300 whitespace-nowrap shrink-0">
+                          <p className="font-sans text-sm font-semibold tabular-nums text-emerald-700 dark:text-emerald-300 whitespace-nowrap shrink-0">
                             +{formatBalance(t.amount, displayCurrency)}
                           </p>
                         </div>
@@ -902,11 +916,11 @@ export default function TransfersPage() {
 
         {/* ── TAB 3: INTERNAL TRANSFER (Activated clients only) ───────────────── */}
         {!needsInitialDeposit && activeTab === "internal" && (
-          <div className="space-y-6">
-            <Card className="border border-border/80 shadow-sm">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-base font-semibold flex items-center gap-2">
-                  <ArrowLeftRight className="w-4 h-4 text-primary" />
+          <div className="space-y-5">
+            <Card className="border border-slate-200/90 dark:border-border bg-white dark:bg-card rounded-lg shadow-xs overflow-hidden">
+              <CardHeader className="border-b border-slate-100 dark:border-border bg-slate-50/70 dark:bg-muted/20 px-5 py-4">
+                <CardTitle className="text-sm font-semibold text-slate-900 dark:text-foreground flex items-center gap-2">
+                  <ArrowLeftRight className="w-4 h-4 text-[#0B2218] dark:text-primary" />
                   Internal Transfer
                   <InfoTip
                     label="Internal transfer info"
@@ -914,23 +928,23 @@ export default function TransfersPage() {
                   />
                 </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-5 sm:p-6">
                 {!accounts || accounts.length < 2 ? (
-                  <p className="text-sm text-muted-foreground py-4">
+                  <p className="text-sm text-slate-500 dark:text-muted-foreground py-4">
                     At least two active accounts are required for internal transfers.
                   </p>
                 ) : (
                   <form onSubmit={handleSubmitInternalTransfer} className="space-y-4">
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       <div className="space-y-1.5">
-                        <label htmlFor="internal-from" className="label-caps text-muted-foreground block">
+                        <label htmlFor="internal-from" className={labelClass}>
                           From Account
                         </label>
                         <select
                           id="internal-from"
                           value={internalFromId}
                           onChange={e => setInternalFromId(e.target.value)}
-                          className="vw-input text-foreground"
+                          className={fieldClass}
                           data-testid="select-internal-from"
                           required
                         >
@@ -943,14 +957,14 @@ export default function TransfersPage() {
                       </div>
 
                       <div className="space-y-1.5">
-                        <label htmlFor="internal-to" className="label-caps text-muted-foreground block">
+                        <label htmlFor="internal-to" className={labelClass}>
                           To Account
                         </label>
                         <select
                           id="internal-to"
                           value={internalToId}
                           onChange={e => setInternalToId(e.target.value)}
-                          className="vw-input text-foreground"
+                          className={fieldClass}
                           data-testid="select-internal-to"
                           required
                         >
@@ -963,7 +977,7 @@ export default function TransfersPage() {
                       </div>
 
                       <div className="space-y-1.5">
-                        <label htmlFor="internal-amount" className="label-caps text-muted-foreground block">
+                        <label htmlFor="internal-amount" className={labelClass}>
                           Amount ({displayCurrency})
                         </label>
                         <Input
@@ -973,7 +987,7 @@ export default function TransfersPage() {
                           value={internalAmount}
                           onChange={e => setInternalAmount(e.target.value)}
                           placeholder="0.00"
-                          className="font-mono tabular-nums"
+                          className="h-10 rounded-md border-slate-200 dark:border-border font-sans tabular-nums"
                           data-testid="input-internal-amount"
                           required
                         />
@@ -985,7 +999,7 @@ export default function TransfersPage() {
                         type="submit"
                         data-funds-action=""
                         disabled={access.blocked || transferMutation.isPending || !internalAmount.trim()}
-                        className="whitespace-nowrap shrink-0"
+                        className="bg-[#0B2218] hover:bg-[#133526] text-white rounded-md whitespace-nowrap shrink-0"
                         data-testid="button-submit-internal-transfer"
                       >
                         {transferMutation.isPending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
@@ -997,31 +1011,31 @@ export default function TransfersPage() {
               </CardContent>
             </Card>
 
-            <Card className="border border-border/80 shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base font-semibold">Recent Internal Transfers</CardTitle>
+            <Card className="border border-slate-200/90 dark:border-border bg-white dark:bg-card rounded-lg shadow-xs overflow-hidden">
+              <CardHeader className="border-b border-slate-100 dark:border-border bg-slate-50/70 dark:bg-muted/20 px-5 py-3.5">
+                <CardTitle className="text-sm font-semibold text-slate-900 dark:text-foreground">Recent Internal Transfers</CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-0">
                 {internalHistory.length === 0 ? (
-                  <p className="text-xs text-muted-foreground py-6 text-center">No internal transfers yet.</p>
+                  <p className="text-xs text-slate-500 dark:text-muted-foreground py-8 text-center">No internal transfers yet.</p>
                 ) : (
-                  <div className="divide-y divide-border/60">
+                  <div className="divide-y divide-slate-100 dark:divide-border/60">
                     {internalHistory.map((t: any) => {
                       const fromAcc = accountById.get(t.fromAccountId);
                       const toAcc = accountById.get(t.toAccountId);
                       return (
-                        <div key={t.id} className="py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                        <div key={t.id} className="px-5 py-3.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                           <div className="min-w-0 space-y-0.5">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="font-mono text-xs text-muted-foreground">TXN-{t.id}</span>
-                              <span className="text-sm font-medium">
+                            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
+                              <span className="font-mono text-xs text-slate-500 dark:text-muted-foreground">TXN-{t.id}</span>
+                              <span className="text-sm font-medium text-slate-900 dark:text-foreground">
                                 {fromAcc ? accountLabel(fromAcc) : `Account #${t.fromAccountId}`} → {toAcc ? accountLabel(toAcc) : `Account #${t.toAccountId}`}
                               </span>
                               <StatusLabel status={t.status} />
                             </div>
-                            <p className="text-xs text-muted-foreground font-mono">{transactionDate(t.createdAt, true)}</p>
+                            <p className="text-xs text-slate-500 dark:text-muted-foreground font-mono">{transactionDate(t.createdAt, true)}</p>
                           </div>
-                          <p className="font-mono text-sm font-semibold tabular-nums whitespace-nowrap shrink-0">
+                          <p className="font-sans text-sm font-semibold tabular-nums text-slate-900 dark:text-foreground whitespace-nowrap shrink-0">
                             {formatBalance(t.amount, displayCurrency)}
                           </p>
                         </div>
@@ -1036,12 +1050,12 @@ export default function TransfersPage() {
 
         {/* ── TAB 4: INSTITUTIONAL TRANSFER (Activated clients only) ───────────── */}
         {!needsInitialDeposit && activeTab === "institutional" && (
-          <Card className="border border-border/80 shadow-sm">
-            <CardHeader>
+          <Card className="border border-slate-200/90 dark:border-border bg-white dark:bg-card rounded-lg shadow-xs overflow-hidden">
+            <CardHeader className="border-b border-slate-100 dark:border-border bg-slate-50/70 dark:bg-muted/20 px-5 py-4">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div className="flex items-center gap-2">
-                  <CardTitle className="flex items-center gap-2 font-display text-lg">
-                    <Building2 className="w-5 h-5 text-primary" />
+                  <CardTitle className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-foreground">
+                    <Building2 className="w-4 h-4 text-[#0B2218] dark:text-primary" />
                     Institutional Transfer
                   </CardTitle>
                   <InfoTip
@@ -1051,25 +1065,26 @@ export default function TransfersPage() {
                 </div>
                 <Button
                   data-funds-action=""
+                  size="sm"
                   onClick={() => setShowInstTransferModal(true)}
-                  className="gap-2 shrink-0 whitespace-nowrap"
+                  className="bg-[#0B2218] hover:bg-[#133526] text-white rounded-md gap-1.5 shrink-0 whitespace-nowrap"
                   data-testid="button-new-institutional-transfer"
                 >
-                  <Plus className="w-4 h-4" />
+                  <Plus className="w-3.5 h-3.5" />
                   New Request
                 </Button>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-5 sm:p-6">
               {statusUnavailable ? (
-                <p className="text-sm text-muted-foreground">Transfer status is unavailable right now. Please retry.</p>
+                <p className="text-sm text-slate-500 dark:text-muted-foreground">Transfer status is unavailable right now. Please retry.</p>
               ) : institutionalTransfersList.length === 0 ? (
                 <div className="text-center py-10 space-y-3">
-                  <Building2 className="w-6 h-6 text-muted-foreground/40 mx-auto" />
-                  <p className="text-sm text-muted-foreground">No institutional transfers yet.</p>
+                  <Building2 className="w-6 h-6 text-slate-300 dark:text-muted-foreground/40 mx-auto" />
+                  <p className="text-xs text-slate-500 dark:text-muted-foreground">No institutional transfers yet.</p>
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-4">
                   {institutionalTransfersList.map((t: any) => {
                     const stage = t.status === "pending" ? 0
                       : t.status === "under_review" ? 1
@@ -1099,7 +1114,7 @@ export default function TransfersPage() {
                       ? "border-orange-200 dark:border-orange-800/30"
                       : "border-amber-200 dark:border-amber-800/30";
                     const statusTextColor = stage === 4 ? "text-emerald-700 dark:text-emerald-400" : isRejected ? "text-rose-700 dark:text-rose-400" : stage === 3 ? "text-violet-700 dark:text-violet-400" : stage === 2 ? "text-orange-700 dark:text-orange-400" : "text-amber-700 dark:text-amber-400";
-                    const statusBg = stage === 4 ? "bg-emerald-50 dark:bg-emerald-900/10" : isRejected ? "bg-rose-50 dark:bg-rose-900/10" : stage === 3 ? "bg-violet-50 dark:bg-violet-900/10" : stage === 2 ? "bg-orange-50 dark:bg-orange-900/10" : "bg-amber-50 dark:bg-amber-900/10";
+                    const statusBg = stage === 4 ? "bg-emerald-50/70 dark:bg-emerald-900/10" : isRejected ? "bg-rose-50/70 dark:bg-rose-900/10" : stage === 3 ? "bg-violet-50/70 dark:bg-violet-900/10" : stage === 2 ? "bg-orange-50/70 dark:bg-orange-900/10" : "bg-amber-50/70 dark:bg-amber-900/10";
 
                     const steps = [
                       { label: "Submitted", done: stage >= 0 },
@@ -1108,62 +1123,62 @@ export default function TransfersPage() {
                       { label: "Transfer Out", done: stage >= 3 },
                       { label: "Complete", done: stage >= 4 },
                     ];
-                    const stepColor = stage === 4 ? "bg-emerald-400" : stage === 3 ? "bg-violet-400" : stage === 2 ? "bg-orange-400" : "bg-amber-400";
+                    const stepColor = stage === 4 ? "bg-emerald-500" : stage === 3 ? "bg-violet-500" : stage === 2 ? "bg-orange-500" : "bg-amber-500";
                     const stepTextColor = stage === 4 ? "text-emerald-800 dark:text-emerald-300" : stage === 3 ? "text-violet-800 dark:text-violet-300" : stage === 2 ? "text-orange-800 dark:text-orange-300" : "text-amber-800 dark:text-amber-300";
 
                     return (
-                      <div key={t.id} className={`rounded-xl border ${cardBorder} overflow-hidden`} data-testid={`inst-transfer-${t.id}`}>
-                        <div className={`${statusBg} px-4 py-2 flex items-center justify-between border-b ${cardBorder}`}>
-                          <span className={`text-xs font-semibold uppercase tracking-wide ${statusTextColor}`}>{LABELS[t.status] ?? t.status}</span>
-                          <span className="text-xs text-muted-foreground">Submitted {new Date(t.createdAt).toLocaleDateString("en-CA")}</span>
+                      <div key={t.id} className={`rounded-lg border ${cardBorder} overflow-hidden`} data-testid={`inst-transfer-${t.id}`}>
+                        <div className={`${statusBg} px-4 py-2.5 flex items-center justify-between border-b ${cardBorder}`}>
+                          <span className={`text-xs font-semibold ${statusTextColor}`}>{LABELS[t.status] ?? t.status}</span>
+                          <span className="text-xs font-mono text-slate-500 dark:text-muted-foreground">Submitted {new Date(t.createdAt).toLocaleDateString("en-CA")}</span>
                         </div>
 
-                        <div className="p-4 space-y-3">
+                        <div className="p-4 sm:p-5 space-y-3">
                           <div className="flex items-start justify-between gap-4">
                             <div>
-                              <div className="flex items-center gap-2">
-                                <p className="font-semibold text-sm">{t.institutionName}</p>
-                                <span className="text-[10px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">Full Portfolio</span>
+                              <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
+                                <p className="font-semibold text-sm text-slate-900 dark:text-foreground">{t.institutionName}</p>
+                                <span className="text-xs font-medium text-slate-500 dark:text-muted-foreground">· Full Portfolio</span>
                               </div>
-                              {t.institutionCountry && <p className="text-xs text-muted-foreground">{destinationCountryName(t.institutionCountry)}</p>}
-                              {t.destinationDetails && <p className="text-xs text-muted-foreground whitespace-pre-wrap break-words mt-1">{t.destinationDetails}</p>}
-                              <p className="text-xs text-muted-foreground mt-0.5">
+                              {t.institutionCountry && <p className="text-xs text-slate-500 dark:text-muted-foreground mt-0.5">{destinationCountryName(t.institutionCountry)}</p>}
+                              {t.destinationDetails && <p className="text-xs text-slate-500 dark:text-muted-foreground whitespace-pre-wrap break-words mt-1">{t.destinationDetails}</p>}
+                              <p className="text-xs text-slate-600 dark:text-muted-foreground mt-1 tabular-nums">
                                 {isCash ? "Cash Transfer" : "In-Kind Transfer"} · {formatBalance(t.partialAmount, displayCurrency)}
                               </p>
                             </div>
                             {stage === 4 ? (
-                              <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                             ) : isRejected ? (
-                              <XCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                              <XCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
                             ) : (
-                              <Clock className={`w-4 h-4 shrink-0 mt-0.5 ${stage === 2 ? "text-orange-500" : "text-amber-500"}`} />
+                              <Clock className={`w-4 h-4 shrink-0 mt-0.5 ${stage === 2 ? "text-orange-600" : "text-amber-600"}`} />
                             )}
                           </div>
 
                           {!isRejected && (
-                            <div className="grid grid-cols-5 gap-1 pt-1">
+                            <div className="grid grid-cols-5 gap-1.5 pt-1">
                               {steps.map((step, i) => (
                                 <div key={i} className="flex flex-col items-center gap-1">
-                                  <div className={`w-full h-1 rounded-full ${step.done ? stepColor : "bg-muted"}`} />
-                                  <span className={`text-[10px] font-medium text-center leading-tight ${step.done ? stepTextColor : "text-muted-foreground"}`}>{step.label}</span>
+                                  <div className={`w-full h-1 rounded-full ${step.done ? stepColor : "bg-slate-200 dark:bg-muted"}`} />
+                                  <span className={`text-[10px] font-medium text-center leading-tight ${step.done ? stepTextColor : "text-slate-400 dark:text-muted-foreground"}`}>{step.label}</span>
                                 </div>
                               ))}
                             </div>
                           )}
 
                           {t.estimatedCompletionDate && (
-                            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/40">
+                            <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/40">
                               <Clock className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                               <div>
-                                <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-700 dark:text-emerald-400">Estimated Completion</p>
-                                <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">{new Date(t.estimatedCompletionDate).toLocaleDateString("en-CA", { year: "numeric", month: "long", day: "numeric" })}</p>
+                                <p className="text-[11px] font-medium text-emerald-700 dark:text-emerald-400">Estimated Completion</p>
+                                <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-300">{new Date(t.estimatedCompletionDate).toLocaleDateString("en-CA", { year: "numeric", month: "long", day: "numeric" })}</p>
                               </div>
                             </div>
                           )}
                           {t.adminNotes && t.adminNotes.toLowerCase().includes("estimated completion date") === false && (
-                            <div className="border-t border-border/40 pt-2">
-                              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-0.5">Advisor Note</p>
-                              <p className="text-xs text-foreground/70">{t.adminNotes}</p>
+                            <div className="border-t border-slate-100 dark:border-border/40 pt-2">
+                              <p className="text-[11px] font-medium text-slate-500 dark:text-muted-foreground mb-0.5">Advisor Note</p>
+                              <p className="text-xs text-slate-700 dark:text-foreground/80">{t.adminNotes}</p>
                             </div>
                           )}
                         </div>
@@ -1179,91 +1194,90 @@ export default function TransfersPage() {
 
       {/* Add Beneficiary Dialog */}
       <Dialog open={payeeModalOpen} onOpenChange={setPayeeModalOpen}>
-        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto bg-[#0B2218] wealth-panel border-white/10 text-white">
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto bg-white dark:bg-card border-slate-200 dark:border-border text-slate-900 dark:text-foreground">
           <DialogHeader>
-            <DialogTitle className="font-serif text-xl text-white flex items-center gap-2">
+            <DialogTitle className="font-serif text-2xl text-slate-900 dark:text-foreground flex items-center gap-2">
               Add Beneficiary
               <InfoTip
                 label="Beneficiary review policy"
                 content="New wire beneficiaries undergo compliance verification before funds can be released."
-                className="border-white/20 bg-white/10 text-white/80 hover:text-white"
               />
             </DialogTitle>
-            <DialogDescription className="sr-only">
+            <DialogDescription className="text-xs text-slate-500 dark:text-muted-foreground">
               Register a domestic or international bank beneficiary.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleCreatePayee} className="space-y-4 py-2">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5 sm:col-span-2">
-                <label htmlFor="payee-scope" className="label-caps text-white/60 block">Transfer Scope</label>
+                <label htmlFor="payee-scope" className={labelClass}>Transfer Scope</label>
                 <select
                   id="payee-scope"
                   value={payeeScope}
                   onChange={e => setPayeeScope(e.target.value === "international" ? "international" : "domestic")}
-                  className="w-full h-10 px-3 bg-white/5 border border-white/15 text-white rounded-sm text-sm"
+                  className={fieldClass}
                   data-testid="select-payee-scope"
                 >
-                  <option value="domestic" className="bg-[#0B2218]">Domestic ({displayCurrency})</option>
-                  <option value="international" className="bg-[#0B2218]">International (SWIFT)</option>
+                  <option value="domestic">Domestic ({displayCurrency})</option>
+                  <option value="international">International (SWIFT)</option>
                 </select>
               </div>
 
               <div className="space-y-1.5">
-                <label htmlFor="payee-name" className="label-caps text-white/60 block">Beneficiary Name</label>
+                <label htmlFor="payee-name" className={labelClass}>Beneficiary Name</label>
                 <Input
                   id="payee-name"
                   value={payeeName}
                   onChange={e => setPayeeName(e.target.value)}
                   placeholder="Full legal or entity name"
-                  className="bg-white/5 border-white/15 text-white placeholder:text-white/30"
+                  className="h-10 rounded-md border-slate-200 dark:border-border"
                   data-testid="input-payee-name"
                   required
                 />
               </div>
               <div className="space-y-1.5">
-                <label htmlFor="payee-type" className="label-caps text-white/60 block">Type</label>
+                <label htmlFor="payee-type" className={labelClass}>Type</label>
                 <select
                   id="payee-type"
                   value={payeeType}
                   onChange={e => setPayeeType(e.target.value === "business" ? "business" : "individual")}
-                  className="w-full h-10 px-3 bg-white/5 border border-white/15 text-white rounded-sm text-sm"
+                  className={fieldClass}
                   data-testid="select-payee-type"
                 >
-                  <option value="individual" className="bg-[#0B2218]">Individual</option>
-                  <option value="business" className="bg-[#0B2218]">Business</option>
+                  <option value="individual">Individual</option>
+                  <option value="business">Business</option>
                 </select>
               </div>
 
               {payeeScope === "international" && (
                 <>
                   <div className="space-y-1.5">
-                    <label htmlFor="payee-country" className="label-caps text-white/60 block">Country</label>
+                    <label htmlFor="payee-country" className={labelClass}>Country</label>
                     <select
                       id="payee-country"
                       value={payeeCountry}
                       onChange={e => setPayeeCountry(e.target.value)}
-                      className="w-full h-10 px-3 bg-white/5 border border-white/15 text-white rounded-sm text-sm"
+                      className={fieldClass}
                       data-testid="select-payee-country"
                     >
                       {ONBOARDING_COUNTRIES.map(c => (
-                        <option key={c.v} value={c.v} className="bg-[#0B2218]">{c.l}</option>
+                        <option key={c.v} value={c.v}>{c.l}</option>
                       ))}
                     </select>
                   </div>
                   <div className="space-y-1.5">
-                    <label htmlFor="payee-currency" className="label-caps text-white/60 block">Currency</label>
+                    <label htmlFor="payee-currency" className={labelClass}>Currency</label>
                     <select
                       id="payee-currency"
                       value={payeeCurrency}
                       onChange={e => {
                         if (isBalanceCurrency(e.target.value)) setPayeeCurrency(e.target.value);
                       }}
-                      className="w-full h-10 px-3 bg-white/5 border border-white/15 text-white rounded-sm text-sm"
+                      className={fieldClass}
                       data-testid="select-payee-currency"
                     >
                       {BALANCE_CURRENCIES.map(code => (
-                        <option key={code} value={code} className="bg-[#0B2218]">
+                        <option key={code} value={code}>
                           {code} — {BALANCE_CURRENCY_INFO[code].name}
                         </option>
                       ))}
@@ -1273,19 +1287,19 @@ export default function TransfersPage() {
               )}
 
               <div className="space-y-1.5 sm:col-span-2">
-                <label htmlFor="payee-bank" className="label-caps text-white/60 block">Bank Name</label>
+                <label htmlFor="payee-bank" className={labelClass}>Bank Name</label>
                 <Input
                   id="payee-bank"
                   value={payeeBankName}
                   onChange={e => setPayeeBankName(e.target.value)}
                   placeholder={payeeScope === "domestic" ? "e.g. RBC Royal Bank" : "e.g. Barclays Bank PLC"}
-                  className="bg-white/5 border-white/15 text-white placeholder:text-white/30"
+                  className="h-10 rounded-md border-slate-200 dark:border-border"
                   data-testid="input-payee-bank"
                   required
                 />
               </div>
               <div className="space-y-1.5">
-                <label htmlFor="payee-account" className="label-caps text-white/60 block">
+                <label htmlFor="payee-account" className={labelClass}>
                   {payeeScope === "international" ? "IBAN / Account Number" : "Account Number"}
                 </label>
                 <Input
@@ -1293,13 +1307,13 @@ export default function TransfersPage() {
                   value={payeeAccountNumber}
                   onChange={e => setPayeeAccountNumber(e.target.value)}
                   placeholder={payeeScope === "international" ? "IBAN or account" : "Account number"}
-                  className="bg-white/5 border-white/15 text-white placeholder:text-white/30 font-mono"
+                  className="h-10 rounded-md border-slate-200 dark:border-border font-mono"
                   data-testid="input-payee-account"
                   required
                 />
               </div>
               <div className="space-y-1.5">
-                <label htmlFor="payee-swift" className="label-caps text-white/60 block">
+                <label htmlFor="payee-swift" className={labelClass}>
                   {payeeScope === "international" ? "SWIFT / BIC" : "Routing / Transit"}
                 </label>
                 <Input
@@ -1307,20 +1321,20 @@ export default function TransfersPage() {
                   value={payeeRoutingNumber}
                   onChange={e => setPayeeRoutingNumber(e.target.value)}
                   placeholder={payeeScope === "international" ? "e.g. BARCGB22" : "Routing number"}
-                  className="bg-white/5 border-white/15 text-white placeholder:text-white/30 font-mono"
+                  className="h-10 rounded-md border-slate-200 dark:border-border font-mono"
                   data-testid="input-payee-routing"
                   required
                 />
               </div>
             </div>
             <DialogFooter className="pt-2">
-              <Button type="button" variant="ghost" className="text-white/60 hover:text-white" onClick={() => setPayeeModalOpen(false)}>
+              <Button type="button" variant="outline" className="rounded-md border-slate-200 dark:border-border" onClick={() => setPayeeModalOpen(false)}>
                 Cancel
               </Button>
               <Button
                 type="submit"
                 disabled={createPayee.isPending}
-                className="bg-white text-[#0B2218] hover:bg-white/90 font-semibold whitespace-nowrap shrink-0"
+                className="bg-[#0B2218] hover:bg-[#133526] text-white rounded-md font-medium whitespace-nowrap shrink-0"
                 data-testid="button-save-beneficiary"
               >
                 {createPayee.isPending ? "Saving…" : "Save Beneficiary"}

@@ -81,13 +81,6 @@ function formatAddress(address: Address | null) {
     .join(", ");
 }
 
-function formatMemberSince(createdAt: unknown) {
-  if (!createdAt) return "Private Client";
-  const d = new Date(String(createdAt));
-  if (!Number.isFinite(d.getTime())) return "Private Client";
-  return d.toLocaleDateString("en-CA", { year: "numeric", month: "short", day: "numeric" });
-}
-
 function ContactInput({
   id,
   label,
@@ -434,17 +427,11 @@ export default function SettingsPage({ profile = false }: { profile?: boolean } 
                   </span>
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-muted-foreground">
-                  {user?.clientRef && (
-                    <span>
-                      Client ID: <span className="font-mono font-medium text-slate-700 dark:text-foreground">{user.clientRef}</span>
-                    </span>
-                  )}
-                  <span aria-hidden="true" className="hidden sm:inline">·</span>
+                  <span>Private client</span>
+                  <span aria-hidden="true">·</span>
                   <span>
                     Reporting Currency: <span className="font-mono font-medium text-slate-700 dark:text-foreground">{currency}</span>
                   </span>
-                  <span aria-hidden="true" className="hidden sm:inline">·</span>
-                  <span>Member since {formatMemberSince(user?.createdAt)}</span>
                 </div>
               </div>
             </div>
@@ -524,12 +511,6 @@ export default function SettingsPage({ profile = false }: { profile?: boolean } 
                 <div className="grid gap-1 py-4 sm:grid-cols-[12rem_1fr] sm:items-center sm:gap-5">
                   <dt className="text-xs font-medium text-slate-500 dark:text-muted-foreground">Legal name</dt>
                   <dd className="break-words text-sm font-semibold text-slate-900 dark:text-foreground">{name}</dd>
-                </div>
-                <div className="grid gap-1 py-4 sm:grid-cols-[12rem_1fr] sm:items-center sm:gap-5">
-                  <dt className="text-xs font-medium text-slate-500 dark:text-muted-foreground">Client reference ID</dt>
-                  <dd className="font-mono text-sm font-medium text-slate-900 dark:text-foreground">
-                    {user?.clientRef || "Assigned at activation"}
-                  </dd>
                 </div>
                 <div className="grid gap-1 py-4 sm:grid-cols-[12rem_1fr] sm:items-center sm:gap-5">
                   <dt className="text-xs font-medium text-slate-500 dark:text-muted-foreground">Account standing</dt>

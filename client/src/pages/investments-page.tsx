@@ -209,337 +209,326 @@ export default function InvestmentsPage() {
   return (
     <LayoutShell>
       <FundsAccessNotice />
-      {/* Hero background section */}
-      <div className="relative -mx-4 -mt-4 mb-8 px-4 py-8 rounded-lg overflow-hidden">
-        <div 
-          className="absolute inset-0 bg-cover bg-center opacity-15"
-          style={{ backgroundImage: 'url(/assets/IMG_3476_1766680873153.jpeg)' }}
-        />
-        <div className="investment-hero-scrim absolute inset-0" />
-        <div className="absolute inset-0 bg-gradient-to-r from-primary/30 to-accent/20" />
-        <div className="relative">
-          <h2 className="text-3xl font-bold font-display text-white">Investments</h2>
-          <p className="text-white/90">Review your recorded holdings and cash positions.</p>
-        </div>
-      </div>
+      <div className="space-y-5">
+        <header className="px-0.5">
+          <h1 className="font-serif text-[28px] sm:text-[32px] font-semibold tracking-tight text-slate-900 dark:text-foreground">
+            Wealth &amp; Custody
+          </h1>
+          <p className="mt-1 text-xs text-slate-500 dark:text-muted-foreground">
+            Review your recorded holdings and cash positions
+          </p>
+        </header>
 
-      <div role="alert" data-testid="market-trading-paused" className="mb-6 border border-border bg-muted/30 p-4 text-sm">
-        Trading is currently paused. Please contact your advisor.
-      </div>
-
-      {needsInitialDeposit ? (
         <div
-          className="rounded-sm border border-primary/25 bg-primary/5 px-5 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
-          data-testid="investments-activation-notice"
+          role="alert"
+          data-testid="market-trading-paused"
+          className="rounded-lg border border-amber-200/90 dark:border-amber-800/50 bg-amber-50/70 dark:bg-amber-950/25 px-5 py-3.5 text-sm text-amber-950 dark:text-amber-200"
         >
-          <div className="flex items-center gap-3 text-sm text-foreground">
-            <Lock className="w-4 h-4 text-primary shrink-0" />
-            <span>
-              {initialDepositPending
-                ? "Initial deposit pending review — investing unlocks after verification."
-                : "Complete your initial deposit to unlock portfolio investing."}
-            </span>
-            <InfoTip
-              label="Investing activation notice"
-              content="Your portfolio investments unlock automatically once an administrator verifies your initial deposit."
-            />
-          </div>
-          <Button
-            size="sm"
-            onClick={() => setLocation("/transfers?tab=deposit")}
-            className="rounded-sm text-xs whitespace-nowrap shrink-0"
-          >
-            {initialDepositPending ? "View Deposit" : "Make Initial Deposit"}
-          </Button>
+          Trading is currently paused. Please contact your advisor.
         </div>
-      ) : (
-        <Tabs defaultValue="stocks" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 mb-6">
-          <TabsTrigger value="stocks" aria-label="Stocks" className="gap-2 text-xs sm:text-sm">
-            <TrendingUp className="w-4 h-4" />
-            <span className="hidden sm:inline">Stocks</span>
-          </TabsTrigger>
-          <TabsTrigger value="etfs" aria-label="ETFs" className="gap-2 text-xs sm:text-sm">
-            <DollarSign className="w-4 h-4" />
-            <span className="hidden sm:inline">ETFs</span>
-          </TabsTrigger>
-          <TabsTrigger value="cash" aria-label="Cash" className="gap-2 text-xs sm:text-sm">
-            <DollarSign className="w-4 h-4" />
-            <span className="hidden sm:inline">Cash</span>
-          </TabsTrigger>
-        </TabsList>
 
-        {/* Stock Trading */}
-        <TabsContent value="stocks" className="space-y-6">
-          <div className="grid lg:grid-cols-3 gap-8">
-            {/* Trading Panel */}
-            <div className="min-w-0 lg:col-span-1">
-              <Card className="border-none shadow-xl shadow-primary/5 overflow-hidden">
-                <div className="bg-primary/5 p-6 border-b border-primary/10">
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <h3 className="text-2xl font-bold">{selectedSymbol}</h3>
-                      <p className="text-sm text-muted-foreground">Stock</p>
-                    </div>
-                  </div>
-                  
-                  <Select value={selectedSymbol} onValueChange={setSelectedSymbol}>
-                    <SelectTrigger className="bg-background h-10">
-                      <SelectValue placeholder="Select Stock" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {STOCKS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
+        {needsInitialDeposit ? (
+          <div
+            className="rounded-lg border border-slate-200/90 dark:border-border bg-white dark:bg-card px-5 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shadow-xs"
+            data-testid="investments-activation-notice"
+          >
+            <div className="flex items-center gap-3 text-sm text-slate-700 dark:text-foreground">
+              <Lock className="w-4 h-4 text-[#0B2218] dark:text-primary shrink-0" />
+              <span>
+                {initialDepositPending
+                  ? "Initial deposit pending review — investing unlocks after verification."
+                  : "Complete your initial deposit to unlock portfolio investing."}
+              </span>
+              <InfoTip
+                label="Investing activation notice"
+                content="Your portfolio investments unlock automatically once an administrator verifies your initial deposit."
+              />
+            </div>
+            <Button
+              size="sm"
+              onClick={() => setLocation("/transfers?tab=deposit")}
+              className="bg-[#0B2218] hover:bg-[#133526] text-white rounded-md text-xs whitespace-nowrap shrink-0"
+            >
+              {initialDepositPending ? "View Deposit" : "Make Initial Deposit"}
+            </Button>
+          </div>
+        ) : (
+          <Tabs defaultValue="stocks" className="w-full">
+            <TabsList className="grid w-full sm:w-auto sm:inline-grid grid-cols-3 mb-5 bg-slate-200/60 dark:bg-muted/40 p-1 rounded-lg">
+              <TabsTrigger value="stocks" aria-label="Stocks" className="gap-2 text-xs sm:text-sm rounded-md whitespace-nowrap">
+                <TrendingUp className="w-3.5 h-3.5" />
+                <span>Stocks</span>
+              </TabsTrigger>
+              <TabsTrigger value="etfs" aria-label="ETFs" className="gap-2 text-xs sm:text-sm rounded-md whitespace-nowrap">
+                <DollarSign className="w-3.5 h-3.5" />
+                <span>ETFs</span>
+              </TabsTrigger>
+              <TabsTrigger value="cash" aria-label="Cash" className="gap-2 text-xs sm:text-sm rounded-md whitespace-nowrap">
+                <DollarSign className="w-3.5 h-3.5" />
+                <span>Cash</span>
+              </TabsTrigger>
+            </TabsList>
 
-                <CardContent className="p-6">
-                  <div className="mb-4">
-                    <Label className="text-xs mb-2 block">Source Account</Label>
-                    <Select value={selectedAccount} onValueChange={setSelectedAccount}>
-                      <SelectTrigger className="h-10">
-                        <SelectValue placeholder="Select Account" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {investmentAccounts.map(a => (
-                          <SelectItem key={a.id} value={a.id.toString()}>
-                            {accountLabel(a)} ({formatBalance(a.balance,clientBalanceCurrency(user))})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <Tabs defaultValue="buy" className="w-full">
-                    <TabsList className="grid w-full grid-cols-2 mb-4">
-                      <TabsTrigger value="buy">Buy</TabsTrigger>
-                      <TabsTrigger value="sell">Sell</TabsTrigger>
-                    </TabsList>
-
-                    <TabsContent value="buy" className="space-y-4">
-                      <div className="space-y-2">
-                        <Label>Amount ($)</Label>
-                        <div className="relative">
-                          <span className="absolute left-3 top-2.5 text-muted-foreground">$</span>
-                          <Input 
-                            type="number" 
-                            placeholder="0.00" 
-                            className="pl-7"
-                            value={amount}
-                            onChange={e => setAmount(e.target.value)}
-                          />
+            {/* Stock Trading */}
+            <TabsContent value="stocks" className="space-y-6">
+              <div className="grid lg:grid-cols-3 gap-5 items-start">
+                {/* Order Entry Panel */}
+                <div className="min-w-0 lg:col-span-1">
+                  <Card className="border border-slate-200/90 dark:border-border bg-white dark:bg-card rounded-lg shadow-xs overflow-hidden">
+                    <div className="bg-slate-50/75 dark:bg-muted/20 p-5 border-b border-slate-100 dark:border-border">
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <p className="text-[11px] font-medium text-slate-500 dark:text-muted-foreground">Equity Custody</p>
+                          <h2 className="text-xl font-semibold text-slate-900 dark:text-foreground mt-0.5">{selectedSymbol}</h2>
                         </div>
                       </div>
-                      <Button 
-                        data-funds-action=""
-                        className={
-                          "w-full bg-emerald-700 hover:bg-emerald-800"
-                        }
-                        onClick={handleBuy}
-                        disabled={(pricingBlocked && !access.blocked) || buyMutation.isPending}
-                      >
-                        {buyMutation.isPending ? "Processing..." : "Buy Stock"}
-                      </Button>
-                    </TabsContent>
 
-                    <TabsContent value="sell" className="space-y-4">
-                      <div className="space-y-2">
-                        <Label>Shares</Label>
-                        <Input 
-                          type="number" 
-                          placeholder="0" 
-                          value={shares}
-                          onChange={e => setShares(e.target.value)}
+                      <Select value={selectedSymbol} onValueChange={setSelectedSymbol}>
+                        <SelectTrigger className="bg-white dark:bg-background h-10 rounded-md border-slate-200 dark:border-border">
+                          <SelectValue placeholder="Select Stock" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {STOCKS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <CardContent className="p-5">
+                      <div className="mb-4">
+                        <Label className="text-xs font-medium text-slate-600 dark:text-muted-foreground mb-1.5 block">Source Account</Label>
+                        <Select value={selectedAccount} onValueChange={setSelectedAccount}>
+                          <SelectTrigger className="h-10 rounded-md border-slate-200 dark:border-border bg-white dark:bg-background">
+                            <SelectValue placeholder="Select Account" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {investmentAccounts.map(a => (
+                              <SelectItem key={a.id} value={a.id.toString()}>
+                                {accountLabel(a)} ({formatBalance(a.balance,clientBalanceCurrency(user))})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <Tabs defaultValue="buy" className="w-full">
+                        <TabsList className="grid w-full grid-cols-2 mb-4 bg-slate-100 dark:bg-muted/40 rounded-md p-1">
+                          <TabsTrigger value="buy" className="rounded-sm text-xs">Buy</TabsTrigger>
+                          <TabsTrigger value="sell" className="rounded-sm text-xs">Sell</TabsTrigger>
+                        </TabsList>
+
+                        <TabsContent value="buy" className="space-y-4">
+                          <div className="space-y-1.5">
+                            <Label className="text-xs font-medium text-slate-600 dark:text-muted-foreground">Amount</Label>
+                            <Input
+                              type="number"
+                              placeholder="0.00"
+                              className="h-10 rounded-md border-slate-200 dark:border-border tabular-nums"
+                              value={amount}
+                              onChange={e => setAmount(e.target.value)}
+                            />
+                          </div>
+                          <Button
+                            data-funds-action=""
+                            className="w-full bg-[#0B2218] hover:bg-[#133526] text-white rounded-md"
+                            onClick={handleBuy}
+                            disabled={(pricingBlocked && !access.blocked) || buyMutation.isPending}
+                          >
+                            {buyMutation.isPending ? "Processing..." : "Buy Stock"}
+                          </Button>
+                        </TabsContent>
+
+                        <TabsContent value="sell" className="space-y-4">
+                          <div className="space-y-1.5">
+                            <Label className="text-xs font-medium text-slate-600 dark:text-muted-foreground">Shares</Label>
+                            <Input
+                              type="number"
+                              placeholder="0"
+                              className="h-10 rounded-md border-slate-200 dark:border-border tabular-nums"
+                              value={shares}
+                              onChange={e => setShares(e.target.value)}
+                            />
+                          </div>
+                          <Button
+                            data-funds-action=""
+                            className="w-full bg-rose-800 hover:bg-rose-900 text-white rounded-md"
+                            onClick={handleSell}
+                            disabled={(pricingBlocked && !access.blocked) || sellMutation.isPending}
+                          >
+                            {sellMutation.isPending ? "Processing..." : "Sell Shares"}
+                          </Button>
+                        </TabsContent>
+                      </Tabs>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Portfolio Table */}
+                <div className="min-w-0 lg:col-span-2">
+                  <Card className="border border-slate-200/90 dark:border-border bg-white dark:bg-card rounded-lg shadow-xs overflow-hidden">
+                    <CardHeader className="border-b border-slate-100 dark:border-border bg-slate-50/70 dark:bg-muted/20 px-5 py-4">
+                      <CardTitle className="text-sm font-semibold text-slate-900 dark:text-foreground">Current Holdings</CardTitle>
+                      <CardDescription className="text-xs">Your recorded investments</CardDescription>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                      {loadingInv ? (
+                        <p className="text-center py-10 text-xs text-slate-500 dark:text-muted-foreground">Loading portfolio...</p>
+                      ) : investments && investments.length > 0 ? (
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="border-slate-100 dark:border-border">
+                              <TableHead className="text-xs">Symbol</TableHead>
+                              <TableHead className="text-xs text-right">Shares</TableHead>
+                              <TableHead className="text-xs text-right">Avg Price</TableHead>
+                              <TableHead className="text-xs text-right">Stored Price</TableHead>
+                              <TableHead className="text-xs text-right">Stored Value</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {investments.map((inv) => {
+                              const marketValue = Number(inv.shares) * Number(inv.currentPrice ?? inv.purchasePrice);
+                              return (
+                                <TableRow key={inv.id} className="border-slate-100 dark:border-border/50">
+                                  <TableCell className="font-semibold text-slate-900 dark:text-foreground">{inv.symbol}</TableCell>
+                                  <TableCell className="text-right font-mono text-xs tabular-nums">{Number(inv.shares).toFixed(4)}</TableCell>
+                                  <TableCell className="text-right text-xs tabular-nums">{formatBalance(inv.purchasePrice,clientBalanceCurrency(user))}</TableCell>
+                                  <TableCell className="text-right text-xs tabular-nums">{formatBalance(inv.currentPrice ?? inv.purchasePrice,clientBalanceCurrency(user))}</TableCell>
+                                  <TableCell className="text-right font-semibold text-xs tabular-nums text-slate-900 dark:text-foreground">
+                                    {formatBalance(marketValue,clientBalanceCurrency(user))}
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      ) : (
+                        <p className="text-center py-12 text-xs text-slate-500 dark:text-muted-foreground">No holdings yet</p>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+            </TabsContent>
+
+            {/* ETF/Fractional Trading */}
+            <TabsContent value="etfs" className="space-y-6">
+              <div className="grid lg:grid-cols-3 gap-5 items-start">
+                <div className="lg:col-span-1">
+                  <Card className="border border-slate-200/90 dark:border-border bg-white dark:bg-card rounded-lg shadow-xs overflow-hidden">
+                    <div className="bg-slate-50/75 dark:bg-muted/20 p-5 border-b border-slate-100 dark:border-border">
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <p className="text-[11px] font-medium text-slate-500 dark:text-muted-foreground">Index &amp; Fund Custody</p>
+                          <h2 className="text-xl font-semibold text-slate-900 dark:text-foreground mt-0.5">{selectedETF}</h2>
+                        </div>
+                      </div>
+
+                      <Select value={selectedETF} onValueChange={setSelectedETF}>
+                        <SelectTrigger className="bg-white dark:bg-background h-10 rounded-md border-slate-200 dark:border-border">
+                          <SelectValue placeholder="Select ETF" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {ETFS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <CardContent className="p-5 space-y-4">
+                      <div>
+                        <Label className="text-xs font-medium text-slate-600 dark:text-muted-foreground mb-1.5 block">Account</Label>
+                        <Select value={etfAccount} onValueChange={setEtfAccount}>
+                          <SelectTrigger className="h-10 rounded-md border-slate-200 dark:border-border bg-white dark:bg-background">
+                            <SelectValue placeholder="Select Account" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {investmentAccounts.map(a => (
+                              <SelectItem key={a.id} value={a.id.toString()}>
+                                {accountLabel(a)} ({formatBalance(a.balance,clientBalanceCurrency(user))})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div>
+                        <Label className="text-xs font-medium text-slate-600 dark:text-muted-foreground mb-1.5 block">Invest Amount</Label>
+                        <Input
+                          type="number"
+                          placeholder="0.00"
+                          className="h-10 rounded-md border-slate-200 dark:border-border tabular-nums"
+                          value={etfAmount}
+                          onChange={e => setEtfAmount(e.target.value)}
                         />
                       </div>
-                      <Button 
+
+                      <Button
                         data-funds-action=""
-                        className={
-                          "w-full bg-rose-700 hover:bg-rose-800"
-                        }
-                        onClick={handleSell}
-                        disabled={(pricingBlocked && !access.blocked) || sellMutation.isPending}
+                        className="w-full bg-[#0B2218] hover:bg-[#133526] text-white rounded-md"
+                        onClick={handleFractionalBuy}
+                        disabled={pricingBlocked && !access.blocked}
                       >
-                        {sellMutation.isPending ? "Processing..." : "Sell Shares"}
+                        Buy Fractional Shares
                       </Button>
-                    </TabsContent>
-                  </Tabs>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Portfolio Table */}
-            <div className="min-w-0 lg:col-span-2">
-              <Card className="border-none shadow-lg">
-                <CardHeader>
-                  <CardTitle>Current Holdings</CardTitle>
-                  <CardDescription>Your recorded investments</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {loadingInv ? (
-                    <p className="text-center py-8 text-muted-foreground">Loading portfolio...</p>
-                  ) : investments && investments.length > 0 ? (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Symbol</TableHead>
-                          <TableHead>Shares</TableHead>
-                          <TableHead>Avg Price</TableHead>
-                          <TableHead>Stored Price</TableHead>
-                          <TableHead className="text-right">Stored Value</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {investments.map((inv) => {
-                          const marketValue = Number(inv.shares) * Number(inv.currentPrice ?? inv.purchasePrice);
-                          return (
-                            <TableRow key={inv.id}>
-                              <TableCell className="font-bold">{inv.symbol}</TableCell>
-                              <TableCell>{Number(inv.shares).toFixed(4)}</TableCell>
-                              <TableCell>{formatBalance(inv.purchasePrice,clientBalanceCurrency(user))}</TableCell>
-                              <TableCell>{formatBalance(inv.currentPrice ?? inv.purchasePrice,clientBalanceCurrency(user))}</TableCell>
-                              <TableCell className="text-right font-medium">
-                                {formatBalance(marketValue,clientBalanceCurrency(user))}
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  ) : (
-                    <p className="text-center py-8 text-muted-foreground">No holdings yet</p>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        </TabsContent>
-
-        {/* ETF/Fractional Trading */}
-        <TabsContent value="etfs" className="space-y-6">
-          <div className="grid lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-1">
-              <Card className="border-none shadow-xl shadow-primary/5 overflow-hidden">
-                <div className="bg-primary/5 p-6 border-b border-primary/10">
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <h3 className="text-2xl font-bold">{selectedETF}</h3>
-                      <p className="text-sm text-muted-foreground">ETF</p>
-                    </div>
-                  </div>
-                  
-                  <Select value={selectedETF} onValueChange={setSelectedETF}>
-                    <SelectTrigger className="bg-background h-10">
-                      <SelectValue placeholder="Select ETF" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {ETFS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                    </CardContent>
+                  </Card>
                 </div>
 
-                <CardContent className="p-6 space-y-4">
-                  <div>
-                    <Label className="text-xs mb-2 block">Account</Label>
-                    <Select value={etfAccount} onValueChange={setEtfAccount}>
-                      <SelectTrigger className="h-10">
-                        <SelectValue placeholder="Select Account" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {investmentAccounts.map(a => (
-                          <SelectItem key={a.id} value={a.id.toString()}>
-                            {accountLabel(a)} ({formatBalance(a.balance,clientBalanceCurrency(user))})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div className="lg:col-span-2">
+                  <Card className="border border-slate-200/90 dark:border-border bg-white dark:bg-card rounded-lg shadow-xs overflow-hidden">
+                    <CardHeader className="border-b border-slate-100 dark:border-border bg-slate-50/70 dark:bg-muted/20 px-5 py-4">
+                      <CardTitle className="text-sm font-semibold text-slate-900 dark:text-foreground">Reference ETFs</CardTitle>
+                      <CardDescription className="text-xs">Eligible index funds for reference</CardDescription>
+                    </CardHeader>
+                    <CardContent className="p-0 divide-y divide-slate-100 dark:divide-border/50">
+                      {[
+                        { symbol: "SPY", name: "S&P 500 ETF" },
+                        { symbol: "QQQ", name: "Nasdaq-100 ETF" },
+                        { symbol: "IVV", name: "Core S&P 500 ETF" },
+                        { symbol: "VOO", name: "Vanguard S&P 500" },
+                        { symbol: "VTI", name: "Total Stock Market" },
+                      ].map(etf => (
+                        <button
+                          key={etf.symbol}
+                          type="button"
+                          onClick={() => setSelectedETF(etf.symbol)}
+                          className="w-full text-left flex items-center justify-between px-5 py-3.5 hover:bg-slate-50/80 dark:hover:bg-muted/30 transition-colors"
+                        >
+                          <div>
+                            <p className="font-semibold text-sm text-slate-900 dark:text-foreground">{etf.symbol}</p>
+                            <p className="text-xs text-slate-500 dark:text-muted-foreground">{etf.name}</p>
+                          </div>
+                          {selectedETF === etf.symbol && (
+                            <span className="text-xs font-medium text-[#0B2218] dark:text-primary">Selected</span>
+                          )}
+                        </button>
+                      ))}
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+            </TabsContent>
 
-                  <div>
-                    <Label>Invest Amount ($)</Label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-2.5 text-muted-foreground">$</span>
-                      <Input 
-                        type="number" 
-                        placeholder="Any amount - fractional shares" 
-                        className="pl-7"
-                        value={etfAmount}
-                        onChange={e => setEtfAmount(e.target.value)}
-                      />
-                    </div>
-                  </div>
-
-                  <Button 
-                    data-funds-action=""
-                    className="w-full bg-blue-600 hover:bg-blue-700" 
-                    onClick={handleFractionalBuy}
-                    disabled={pricingBlocked && !access.blocked}
-                  >
-                    Buy Fractional Shares
-                  </Button>
-                </CardContent>
-              </Card>
-            </div>
-
-            <div className="lg:col-span-2">
-              <Card className="border-none shadow-lg">
-                <CardHeader>
-                  <CardTitle>Popular ETFs</CardTitle>
-                  <CardDescription>ETF symbols for reference</CardDescription>
+            {/* Cash Management */}
+            <TabsContent value="cash" className="space-y-6">
+              <Card className="border border-slate-200/90 dark:border-border bg-white dark:bg-card rounded-lg shadow-xs overflow-hidden">
+                <CardHeader className="border-b border-slate-100 dark:border-border bg-slate-50/70 dark:bg-muted/20 px-5 py-4">
+                  <CardTitle className="text-sm font-semibold text-slate-900 dark:text-foreground">Cash Positions</CardTitle>
+                  <CardDescription className="text-xs">Cash balances held in your investment accounts.</CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {[
-                      { symbol: "SPY", name: "S&P 500 ETF" },
-                      { symbol: "QQQ", name: "Nasdaq-100 ETF" },
-                      { symbol: "IVV", name: "Core S&P 500 ETF" },
-                      { symbol: "VOO", name: "Vanguard S&P 500" },
-                      { symbol: "VTI", name: "Total Stock Market" },
-                    ].map(etf => (
-                      <div key={etf.symbol} className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50">
-                        <div>
-                          <p className="font-semibold text-sm">{etf.symbol}</p>
-                          <p className="text-xs text-muted-foreground">{etf.name}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        </TabsContent>
-
-        {/* Cash Management */}
-        <TabsContent value="cash" className="space-y-6">
-          <Card className="border-none shadow-lg">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <DollarSign className="w-5 h-5 text-primary" />
-                Cash Management
-              </CardTitle>
-              <CardDescription>Cash balances held in your investment accounts.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Card className="bg-muted/30">
-                <CardHeader>
-                  <CardTitle className="text-base">Your Cash Positions</CardTitle>
-                </CardHeader>
-                <CardContent>
+                <CardContent className="p-0">
                   <Table>
                     <TableHeader>
-                      <TableRow>
-                        <TableHead>Account</TableHead>
-                        <TableHead>Cash Balance</TableHead>
+                      <TableRow className="border-slate-100 dark:border-border">
+                        <TableHead className="text-xs">Account</TableHead>
+                        <TableHead className="text-xs text-right">Cash Balance</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {investmentAccounts.map(a => {
                         const balance = Number(a.balance);
                         return (
-                          <TableRow key={a.id}>
-                            <TableCell>{accountLabel(a)}</TableCell>
-                            <TableCell>{formatBalance(balance,clientBalanceCurrency(user))}</TableCell>
+                          <TableRow key={a.id} className="border-slate-100 dark:border-border/50">
+                            <TableCell className="text-sm font-medium text-slate-900 dark:text-foreground">{accountLabel(a)}</TableCell>
+                            <TableCell className="text-right font-sans text-sm font-semibold tabular-nums text-slate-900 dark:text-foreground">{formatBalance(balance,clientBalanceCurrency(user))}</TableCell>
                           </TableRow>
                         );
                       })}
@@ -547,11 +536,10 @@ export default function InvestmentsPage() {
                   </Table>
                 </CardContent>
               </Card>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        </Tabs>
-      )}
+            </TabsContent>
+          </Tabs>
+        )}
+      </div>
     </LayoutShell>
   );
 }

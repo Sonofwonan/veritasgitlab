@@ -30,7 +30,7 @@ export function FundsActionDialog({
       <DialogContent
         data-testid="funds-action-dialog"
         onCloseAutoFocus={onCloseAutoFocus}
-        className="w-[calc(100%_-_2rem)] max-w-md gap-0 rounded-sm border-border bg-card p-0 shadow-xl sm:w-full"
+        className="w-[calc(100%_-_2rem)] max-w-md gap-0 rounded-lg border-border bg-card p-0 shadow-xl sm:w-full"
       >
         <DialogHeader className="space-y-2 border-b border-border/70 px-5 py-5 text-left sm:px-6 sm:py-6">
           <DialogTitle className="pr-8 text-lg font-semibold leading-snug text-foreground sm:text-xl">
@@ -53,13 +53,13 @@ export function FundsActionDialog({
             <Button
               type="button"
               onClick={retry}
-              className="w-full sm:w-auto sm:min-w-24"
+              className="w-full sm:w-auto sm:min-w-24 bg-[#0B2218] hover:bg-[#123324] text-white"
             >
               Retry
             </Button>
           )}
           {!retry && message.includes("advisor") && (
-            <Button asChild className="w-full sm:w-auto">
+            <Button asChild className="w-full sm:w-auto bg-[#0B2218] hover:bg-[#123324] text-white">
               <a href="mailto:veritaswealth@accountant.com">Contact advisor</a>
             </Button>
           )}

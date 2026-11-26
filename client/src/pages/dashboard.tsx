@@ -9,9 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useActiveLiquidation } from "@/hooks/use-liquidation-status";
 import {
-  TrendingUp, ArrowUpRight, ArrowDownRight,
-  ArrowLeftRight, Clock, Info, ChevronRight, Landmark,
-  Briefcase, BarChart3, Building2, Lock
+  TrendingUp, ArrowLeftRight, Clock, Info, ChevronRight, Landmark,
+  BarChart3, Building2, Lock
 } from "lucide-react";
 import { transactionDescription, clientBalanceCurrency, formatBalance } from "@shared/balance-currency";
 import { useFundsAccess } from "@/hooks/use-funds-access";
@@ -208,17 +207,11 @@ export default function DashboardPage() {
         {/* ── Greeting Header ─────────────────────────────────────────────── */}
         <div className="flex flex-wrap items-end justify-between gap-2 px-0.5">
           <div>
-            <h1 className="font-serif text-[26px] sm:text-[30px] font-semibold tracking-tight text-slate-900 dark:text-foreground">
+            <h1 className="font-serif text-[28px] sm:text-[32px] font-semibold tracking-tight text-slate-900 dark:text-foreground">
               {getGreeting()}{firstName ? `, ${firstName}` : ""}
             </h1>
-            <p className="text-xs text-slate-500 dark:text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-1.5">
-              <span>Private Banking Overview</span>
-              {user?.clientRef && (
-                <>
-                  <span aria-hidden="true">·</span>
-                  <span>Client Ref <span className="font-mono text-[11px] font-medium text-slate-700 dark:text-foreground">{user.clientRef}</span></span>
-                </>
-              )}
+            <p className="text-xs text-slate-500 dark:text-muted-foreground mt-1">
+              Portfolio summary and account balances
             </p>
           </div>
         </div>
@@ -226,19 +219,19 @@ export default function DashboardPage() {
         {/* ── Portfolio Summary Card (Crisp White Private Bank) ───────────── */}
         <section
           aria-label="Portfolio summary"
-          className="bg-white dark:bg-card border border-slate-200/90 dark:border-border border-t-2 border-t-[#C6A15B]/80 rounded-lg shadow-sm overflow-hidden"
+          className="bg-white dark:bg-card border border-slate-200/90 dark:border-border border-t-2 border-t-[#C6A15B]/80 rounded-lg shadow-xs overflow-hidden"
         >
-          <div className="px-5 sm:px-7 py-5 sm:py-6 border-b border-slate-100 dark:border-border">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-5">
+          <div className="px-5 sm:px-7 py-5 sm:py-6 border-b border-slate-100 dark:border-border space-y-5">
+            <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-5">
               {/* Funded total balance */}
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-medium text-slate-500 dark:text-muted-foreground mb-1">
+                <p className="text-xs font-medium text-slate-500 dark:text-muted-foreground mb-1.5">
                   Total balance · Funded accounts and holdings
                 </p>
                 <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
                   <span
                     className={cn(
-                      "font-sans font-semibold tabular-nums text-[clamp(1.85rem,4.5vw,2.75rem)] tracking-tight break-all",
+                      "font-sans font-semibold tabular-nums text-[clamp(1.85rem,4.5vw,2.75rem)] tracking-tight leading-none break-all",
                       isTransmitting ? "text-violet-700 dark:text-violet-300" : "text-slate-900 dark:text-foreground"
                     )}
                     data-testid="text-total-balance"
@@ -247,12 +240,12 @@ export default function DashboardPage() {
                   </span>
                 </div>
                 {isTransmitting && (
-                  <p className="text-violet-700 dark:text-violet-300 text-xs mt-1.5 font-medium">
+                  <p className="text-violet-700 dark:text-violet-300 text-xs mt-2 font-medium">
                     Funds in transit to {activeTransfer?.institutionName}
                   </p>
                 )}
                 {balanceUnavailable && (
-                  <p role="alert" className="text-rose-700 dark:text-rose-400 text-xs mt-1.5">
+                  <p role="alert" className="text-rose-700 dark:text-rose-400 text-xs mt-2">
                     Current balances could not be loaded.
                     <button
                       type="button"
@@ -283,7 +276,7 @@ export default function DashboardPage() {
                       }}
                       data-funds-action={href !== "/accounts" ? "" : undefined}
                       className={cn(
-                        "min-w-0 min-h-[42px] inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-md border text-xs font-medium transition-colors whitespace-nowrap",
+                        "min-w-0 min-h-[40px] inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-md border text-xs font-medium transition-colors whitespace-nowrap shrink-0",
                         isDepositLocked
                           ? "bg-slate-100 dark:bg-muted/40 border-slate-200 dark:border-border text-slate-400 dark:text-muted-foreground cursor-not-allowed"
                           : isPrimary
@@ -293,16 +286,49 @@ export default function DashboardPage() {
                       data-testid={`button-quick-${label.toLowerCase()}`}
                     >
                       <ActionIcon className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-                      <span className="truncate">{label}</span>
+                      <span>{label}</span>
                     </button>
                   );
                 })}
               </div>
             </div>
+
+            {!balanceUnavailable && totalBalance > 0 && (() => {
+              const cashPct = Math.round((cashTotal / totalBalance) * 100);
+              const investPct = Math.max(0, 100 - cashPct);
+              return (
+                <div className="space-y-2 pt-1">
+                  <div className="h-1.5 w-full rounded-full bg-slate-100 dark:bg-muted overflow-hidden flex">
+                    {cashPct > 0 && (
+                      <div
+                        className="h-full bg-[#0B2218] dark:bg-emerald-500 transition-all"
+                        style={{ width: `${cashPct}%` }}
+                      />
+                    )}
+                    {investPct > 0 && (
+                      <div
+                        className="h-full bg-[#C6A15B] transition-all"
+                        style={{ width: `${investPct}%` }}
+                      />
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-slate-500 dark:text-muted-foreground">
+                    <span className="inline-flex items-center gap-1.5 tabular-nums">
+                      <span className="w-2 h-2 rounded-xs bg-[#0B2218] dark:bg-emerald-500 shrink-0" aria-hidden="true" />
+                      Liquid cash {cashPct}%
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 tabular-nums">
+                      <span className="w-2 h-2 rounded-xs bg-[#C6A15B] shrink-0" aria-hidden="true" />
+                      Investments {investPct}%
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Summary KPI strip */}
-          <div className="bg-slate-50/75 dark:bg-muted/20 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 [&>*]:border-slate-200/80 dark:[&>*]:border-border [&>*:not(:first-child)]:border-t sm:[&>*:nth-child(2)]:border-t-0 sm:[&>*:nth-child(even)]:border-l xl:[&>*:not(:first-child)]:border-t-0 xl:[&>*:not(:first-child)]:border-l">
+          <div className="bg-slate-50/70 dark:bg-muted/20 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 [&>*]:border-slate-200/80 dark:[&>*]:border-border [&>*:not(:first-child)]:border-t sm:[&>*:nth-child(2)]:border-t-0 sm:[&>*:nth-child(even)]:border-l xl:[&>*:not(:first-child)]:border-t-0 xl:[&>*:not(:first-child)]:border-l">
             {[
               {
                 label: 'Liquid Cash',
@@ -494,43 +520,44 @@ export default function DashboardPage() {
               {accounts.slice(0, 6).map(acc => {
                 const cat = categoryOf(acc.accountType);
                 const overdrawn = Number(acc.balance) < 0;
+                const typeLabel = acc.accountType === "Trust Account"
+                  ? "Fiduciary & Trust"
+                  : cat === "investment"
+                    ? "Investment Custody"
+                    : "Cash & Banking";
                 return (
                   <button
                     type="button"
                     key={acc.id}
-                    className="w-full text-left bg-white dark:bg-card border border-slate-200/90 dark:border-border hover:border-slate-300 dark:hover:border-primary/40 rounded-lg p-4 sm:p-5 transition-colors group shadow-xs flex flex-col justify-between gap-4"
+                    className="w-full text-left bg-white dark:bg-card border border-slate-200/90 dark:border-border hover:border-[#0B2218]/35 dark:hover:border-primary/40 rounded-lg p-5 transition-colors group shadow-xs flex flex-col justify-between gap-4"
                     onClick={() => setLocation(`/accounts/${acc.id}`)}
                     data-testid={`dash-account-${acc.id}`}
                   >
                     <div className="flex items-start justify-between gap-3 min-w-0">
-                      <div className="flex items-start gap-3 min-w-0 flex-1">
-                        <div className={cn(
-                          'w-8 h-8 rounded-md flex items-center justify-center shrink-0',
-                          cat === 'investment' ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300' : 'bg-slate-100 dark:bg-muted text-slate-700 dark:text-foreground'
-                        )}>
-                          {cat === 'investment' ? <BarChart3 className="w-4 h-4" /> : <Landmark className="w-4 h-4" />}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold text-slate-900 dark:text-foreground [overflow-wrap:anywhere]" data-testid={`dash-account-name-${acc.id}`}>
-                            {accountLabel(acc)}
-                          </p>
-                          <p className="text-xs text-slate-500 dark:text-muted-foreground font-mono mt-0.5">
-                            {maskAccountNumber(acc.accountNumber)}
-                          </p>
-                        </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[11px] font-medium text-slate-500 dark:text-muted-foreground mb-1">
+                          {typeLabel}
+                        </p>
+                        <p className="text-sm font-semibold text-slate-900 dark:text-foreground [overflow-wrap:anywhere]" data-testid={`dash-account-name-${acc.id}`}>
+                          {accountLabel(acc)}
+                        </p>
+                        <p className="text-xs text-slate-500 dark:text-muted-foreground font-mono mt-1">
+                          {maskAccountNumber(acc.accountNumber)}
+                        </p>
                       </div>
-                      <ChevronRight className="w-4 h-4 shrink-0 text-slate-300 dark:text-muted-foreground/40 group-hover:text-slate-700 dark:group-hover:text-foreground transition-colors mt-0.5" />
+                      <ChevronRight className="w-4 h-4 shrink-0 text-slate-300 dark:text-muted-foreground/40 group-hover:text-[#0B2218] dark:group-hover:text-foreground transition-colors mt-0.5" />
                     </div>
-                    <div>
-                      <p className="text-[11px] text-slate-500 dark:text-muted-foreground mb-0.5">Balance</p>
-                      <p className={cn(
-                        "font-sans text-base sm:text-lg font-semibold tracking-tight tabular-nums",
-                        overdrawn ? "text-rose-700 dark:text-rose-400" : "text-slate-900 dark:text-foreground"
-                      )}>
-                        <span className="[overflow-wrap:anywhere]" data-testid={`dash-account-balance-${acc.id}`}>
-                          {fmt(acc.balance)}
-                        </span>
-                      </p>
+                    <div className="pt-3 border-t border-slate-100 dark:border-border/60 flex items-baseline justify-between gap-3">
+                      <span className="text-[11px] font-medium text-slate-500 dark:text-muted-foreground">Balance</span>
+                      <span
+                        className={cn(
+                          "font-sans text-base sm:text-lg font-semibold tracking-tight tabular-nums [overflow-wrap:anywhere]",
+                          overdrawn ? "text-rose-700 dark:text-rose-400" : "text-slate-900 dark:text-foreground"
+                        )}
+                        data-testid={`dash-account-balance-${acc.id}`}
+                      >
+                        {fmt(acc.balance)}
+                      </span>
                     </div>
                   </button>
                 );
@@ -548,7 +575,7 @@ export default function DashboardPage() {
 
           {/* Left: Recent Transactions Ledger */}
           <div className="min-w-0 bg-white dark:bg-card border border-slate-200/90 dark:border-border rounded-lg overflow-hidden shadow-xs flex flex-col">
-            <div className="px-4 sm:px-6 py-3.5 border-b border-slate-100 dark:border-border flex items-center justify-between">
+            <div className="px-5 py-4 border-b border-slate-100 dark:border-border flex items-center justify-between">
               <div>
                 <h2 className="font-sans font-semibold text-sm text-slate-900 dark:text-foreground">Transaction history</h2>
                 <p className="text-xs text-slate-500 dark:text-muted-foreground mt-0.5">Recent transactions</p>
@@ -562,11 +589,11 @@ export default function DashboardPage() {
                 View all <ChevronRight className="w-3.5 h-3.5" />
               </button>
             </div>
-            <div className="min-w-0 divide-y divide-slate-100 dark:divide-border/40 max-h-[360px] overflow-y-auto custom-scrollbar flex-1">
+            <div className="min-w-0 divide-y divide-slate-100 dark:divide-border/40 max-h-[380px] overflow-y-auto custom-scrollbar flex-1">
               {txnLoading ? (
-                <div className="p-4 space-y-2">{[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-12" />)}</div>
+                <div className="p-5 space-y-2">{[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-12" />)}</div>
               ) : txnError ? (
-                <p role="alert" className="p-4 text-sm text-rose-700">Transaction history could not be loaded.</p>
+                <p role="alert" className="p-5 text-sm text-rose-700">Transaction history could not be loaded.</p>
               ) : transactions && transactions.length > 0 ? transactions.map((txn: any) => {
                 const incomingAccount = accounts?.find(a => a.id === txn.toAccountId);
                 const outgoingAccount = accounts?.find(a => a.id === txn.fromAccountId);
@@ -579,54 +606,37 @@ export default function DashboardPage() {
                 return (
                   <div
                     key={txn.id}
-                    className="flex min-w-0 items-start justify-between gap-3 px-4 sm:px-6 py-3.5 hover:bg-slate-50/80 dark:hover:bg-muted/30 transition-colors cursor-pointer group"
+                    className="flex min-w-0 items-start justify-between gap-4 px-5 py-3.5 hover:bg-slate-50/80 dark:hover:bg-muted/30 transition-colors cursor-pointer"
                     onClick={() => setSelectedTxn(txn)}
                     data-testid={`txn-row-${txn.id}`}
                   >
-                    <div className="flex min-w-0 flex-1 items-center gap-3">
-                      <div className={cn(
-                        'w-8 h-8 rounded-full flex items-center justify-center shrink-0',
-                        isPending
-                          ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'
-                          : isIn
-                            ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400'
-                            : 'bg-slate-100 dark:bg-muted text-slate-600 dark:text-muted-foreground'
-                      )}>
-                        {isPending
-                          ? <Clock className="w-3.5 h-3.5" />
-                          : isIn
-                            ? <ArrowUpRight className="w-3.5 h-3.5" />
-                            : <ArrowDownRight className="w-3.5 h-3.5" />
-                        }
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-slate-900 dark:text-foreground whitespace-normal [overflow-wrap:anywhere]">
-                          {transactionDescription(txn.description, currency, txn.transactionType)}
-                        </p>
-                        <p className="text-xs text-slate-500 dark:text-muted-foreground whitespace-normal [overflow-wrap:anywhere] mt-0.5">
-                          <span className="font-mono">{transactionDate(txn.createdAt)}</span>
-                          {accountText && (
-                            <>
-                              <span aria-hidden="true"> · </span>
-                              <span>{accountText}</span>
-                            </>
-                          )}
-                          {isPending && (
-                            <>
-                              <span aria-hidden="true"> · </span>
-                              <span className="font-semibold text-amber-700 dark:text-amber-300">Pending</span>
-                            </>
-                          )}
-                        </p>
-                      </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-slate-900 dark:text-foreground whitespace-normal [overflow-wrap:anywhere]">
+                        {transactionDescription(txn.description, currency, txn.transactionType)}
+                      </p>
+                      <p className="text-xs text-slate-500 dark:text-muted-foreground whitespace-normal [overflow-wrap:anywhere] mt-1">
+                        <span className="font-mono">{transactionDate(txn.createdAt)}</span>
+                        {accountText && (
+                          <>
+                            <span aria-hidden="true"> · </span>
+                            <span>{accountText}</span>
+                          </>
+                        )}
+                        {isPending && (
+                          <>
+                            <span aria-hidden="true"> · </span>
+                            <span className="font-semibold text-amber-700 dark:text-amber-300">Pending</span>
+                          </>
+                        )}
+                      </p>
                     </div>
-                    <div className="flex min-w-0 max-w-[50%] sm:max-w-[44%] shrink-0 flex-col items-end gap-0.5">
+                    <div className="flex min-w-0 max-w-[46%] shrink-0 flex-col items-end gap-0.5">
                       <TransactionAmountBalance
                         amount={`${internal ? "↔ " : isIn ? "+" : "−"}${fmt(Number(txn.amount))}`}
                         currency={currency}
                         postings={(txn.cashPostings as CashPosting[] | undefined) || []}
                         amountClassName={cn(
-                          'font-semibold',
+                          'font-semibold text-sm',
                           isPending
                             ? 'text-amber-700 dark:text-amber-300'
                             : internal

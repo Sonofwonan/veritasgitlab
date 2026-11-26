@@ -5,7 +5,7 @@ import { LayoutShell } from "@/components/layout-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Search, ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Clock, RotateCcw } from "lucide-react";
+import { Search, ArrowLeftRight, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { clientBalanceCurrency, formatBalance, transactionDescription } from "@shared/balance-currency";
 import { accountLabel, transactionDate, type CashPosting } from "@shared/account-display";
@@ -75,37 +75,36 @@ export default function TransactionsPage() {
   return (
     <LayoutShell>
       <section className="space-y-5" data-testid="transactions-page" aria-labelledby="transactions-title">
-        <header className="border-b border-border/60 pb-5">
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">Your accounts</p>
-          <h1 id="transactions-title" className="font-display text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
-            Transaction history
+        <header className="px-0.5">
+          <h1 id="transactions-title" className="font-serif text-[28px] sm:text-[32px] font-semibold tracking-tight text-slate-900 dark:text-foreground">
+            Transaction History
           </h1>
-          <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-            All recorded activity across your accounts.
+          <p className="mt-1 text-xs text-slate-500 dark:text-muted-foreground">
+            Recorded ledger activity across your accounts
           </p>
         </header>
 
-        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(13rem,0.42fr)]">
+        <div className="bg-white dark:bg-card border border-slate-200/90 dark:border-border rounded-lg p-3 shadow-xs grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(14rem,0.45fr)]">
           <div className="relative">
-            <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-muted-foreground" />
             <Input
               data-testid="transactions-search"
               aria-label="Search descriptions and account names"
               placeholder="Search descriptions or accounts"
               value={search}
               onChange={event => setSearch(event.target.value)}
-              className="h-11 rounded-sm border-border/70 bg-background pl-10"
+              className="h-10 rounded-md border-slate-200 dark:border-border bg-white dark:bg-background pl-9"
             />
           </div>
-          <label className="flex items-center gap-3 rounded-sm border border-border/70 bg-background px-3 focus-within:ring-2 focus-within:ring-ring">
-            <span className="shrink-0 text-xs font-medium text-muted-foreground">Account</span>
+          <label className="flex h-10 items-center gap-3 rounded-md border border-slate-200 dark:border-border bg-white dark:bg-background px-3 focus-within:ring-2 focus-within:ring-ring">
+            <span className="shrink-0 text-xs font-medium text-slate-500 dark:text-muted-foreground">Account</span>
             <select
               data-testid="transactions-account-filter"
               aria-label="Filter by account"
               value={accountFilter}
               onChange={event => setAccountFilter(event.target.value)}
               disabled={accountsLoading || accountsError}
-              className="h-10 min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none disabled:cursor-not-allowed disabled:opacity-60"
+              className="h-full min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none disabled:cursor-not-allowed disabled:opacity-60"
             >
               <option value="all">All accounts</option>
               {ownedAccounts.map(account => (
@@ -115,12 +114,11 @@ export default function TransactionsPage() {
           </label>
         </div>
 
-        <div className="overflow-hidden rounded-sm border border-border/70 bg-card">
+        <div className="overflow-hidden rounded-lg border border-slate-200/90 dark:border-border bg-white dark:bg-card shadow-xs">
           {accountsLoading || transactionsLoading ? (
-            <div className="space-y-0 divide-y divide-border/50" data-testid="transactions-loading" role="status" aria-label="Loading transaction history">
+            <div className="space-y-0 divide-y divide-slate-100 dark:divide-border/50" data-testid="transactions-loading" role="status" aria-label="Loading transaction history">
               {Array.from({ length: 5 }, (_, index) => (
-                <div key={index} className="flex items-center gap-4 px-4 py-5 sm:px-5">
-                  <Skeleton className="h-9 w-9 shrink-0 rounded-full" />
+                <div key={index} className="flex items-center gap-4 px-5 py-4">
                   <div className="min-w-0 flex-1 space-y-2">
                     <Skeleton className="h-4 w-2/5" />
                     <Skeleton className="h-3 w-3/5" />
@@ -131,46 +129,52 @@ export default function TransactionsPage() {
             </div>
           ) : accountsError || transactionsError ? (
             <div className="px-5 py-12 text-center" role="alert" data-testid="transactions-error">
-              <p className="font-medium text-foreground">
+              <p className="font-medium text-slate-900 dark:text-foreground">
                 {transactionsError && accountsError
                   ? "Your transaction history and account details aren’t available right now."
                   : transactionsError
                     ? "Your transaction history isn’t available right now."
                     : "Your account details couldn’t be loaded."}
               </p>
-              <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
+              <p className="mx-auto mt-1 max-w-md text-xs text-slate-500 dark:text-muted-foreground">
                 {accountsError && !transactionsError
                   ? "Account names and filters depend on this information. Please retry, or contact your advisor if the problem continues."
                   : "Please retry. If the problem continues, contact your advisor."}
               </p>
-              <Button variant="outline" className="mt-4 gap-2 rounded-sm" onClick={retry} data-testid="transactions-retry">
-                <RotateCcw className="h-4 w-4" /> Retry
+              <Button variant="outline" className="mt-4 gap-2 rounded-md border-slate-200 dark:border-border" onClick={retry} data-testid="transactions-retry">
+                <RotateCcw className="h-3.5 w-3.5" /> Retry
               </Button>
             </div>
           ) : (transactions ?? []).length === 0 ? (
             <div className="px-5 py-14 text-center" data-testid="transactions-empty">
-              <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-muted/60 text-muted-foreground">
+              <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-md bg-slate-100 dark:bg-muted/60 text-slate-500 dark:text-muted-foreground">
                 <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />
               </div>
-              <p className="font-medium text-foreground">No transactions yet</p>
-              <p className="mt-1 text-sm text-muted-foreground">Your account activity will appear here.</p>
+              <p className="text-sm font-medium text-slate-900 dark:text-foreground">No transactions yet</p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-muted-foreground">Your account activity will appear here.</p>
             </div>
           ) : filteredTransactions.length === 0 ? (
             <div className="px-5 py-14 text-center" data-testid="transactions-no-results">
-              <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-muted/60 text-muted-foreground">
+              <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-md bg-slate-100 dark:bg-muted/60 text-slate-500 dark:text-muted-foreground">
                 <Search className="h-4 w-4" aria-hidden="true" />
               </div>
-              <p className="font-medium text-foreground">No matching transactions</p>
-              <p className="mt-1 text-sm text-muted-foreground">Try another search or account.</p>
+              <p className="text-sm font-medium text-slate-900 dark:text-foreground">No matching transactions</p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-muted-foreground">Try another search or account.</p>
               {(search || accountFilter !== "all") && (
-                <Button variant="ghost" className="mt-2 rounded-sm text-primary" onClick={() => { setSearch(""); setAccountFilter("all"); }}>
+                <Button variant="outline" size="sm" className="mt-3 rounded-md border-slate-200 dark:border-border text-xs" onClick={() => { setSearch(""); setAccountFilter("all"); }}>
                   Clear filters
                 </Button>
               )}
             </div>
           ) : (
             <>
-              <div className="divide-y divide-border/50" role="list" aria-label="Transactions">
+              <div className="hidden md:grid md:grid-cols-[130px_minmax(0,1fr)_100px_minmax(150px,auto)] gap-4 border-b border-slate-100 dark:border-border bg-slate-50/70 dark:bg-muted/20 px-5 py-3 text-[11px] font-medium text-slate-500 dark:text-muted-foreground">
+                <span>Date</span>
+                <span>Activity &amp; Account</span>
+                <span>Status</span>
+                <span className="text-right">Amount</span>
+              </div>
+              <div className="divide-y divide-slate-100 dark:divide-border/50" role="list" aria-label="Transactions">
                 {visibleTransactions.map(transaction => {
                   const fromAccount = transaction.fromAccountId == null ? undefined : accountById.get(transaction.fromAccountId);
                   const toAccount = transaction.toAccountId == null ? undefined : accountById.get(transaction.toAccountId);
@@ -188,73 +192,89 @@ export default function TransactionsPage() {
                   const description = transactionDescription(transaction.description, currency, transaction.transactionType);
                   const formattedDate = transaction.createdAt ? transactionDate(transaction.createdAt) : "Date unavailable";
                   const isPending = transaction.status === "pending";
-                  const Icon = isPending ? Clock : direction === "internal" ? ArrowLeftRight : direction === "incoming" ? ArrowDownLeft : ArrowUpRight;
                   return (
                     <article
                       key={transaction.id}
                       role="listitem"
                       data-testid={`transaction-row-${transaction.id}`}
-                      className="flex min-w-0 items-start justify-between gap-3 px-4 py-4 transition-colors hover:bg-muted/20 sm:px-5"
+                      className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[130px_minmax(0,1fr)_100px_minmax(150px,auto)] items-start md:items-center gap-x-4 gap-y-1 px-5 py-4 transition-colors hover:bg-slate-50/70 dark:hover:bg-muted/20"
                     >
-                      <div className="flex min-w-0 items-start gap-3">
-                        <span className={cn(
-                          "mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
-                          isPending ? "bg-amber-100 text-amber-800" :
-                            direction === "incoming" ? "bg-emerald-100 text-emerald-800" :
-                              direction === "outgoing" ? "bg-rose-100 text-rose-800" : "bg-muted text-muted-foreground"
-                        )}>
-                          <Icon className="h-4 w-4" aria-hidden="true" />
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <p className="break-words text-sm font-semibold text-foreground [overflow-wrap:anywhere]">{description || "Transaction"}</p>
-                          <p className="mt-1 break-words text-xs text-muted-foreground [overflow-wrap:anywhere]">{accountText}</p>
-                          <p className="mt-1 text-xs text-muted-foreground">{formattedDate}</p>
-                          <p className={cn("mt-0.5 text-xs font-semibold capitalize", isPending ? "text-amber-800" : "text-muted-foreground")}>{transaction.status}</p>
-                        </div>
+                      <div className="hidden md:block font-mono text-xs text-slate-500 dark:text-muted-foreground whitespace-nowrap">
+                        {formattedDate}
                       </div>
-                      <div className="flex min-w-0 max-w-[60%] shrink-0 flex-col items-end text-right">
-                        <div className="min-w-0 max-w-full">
-                          <TransactionAmountBalance
-                            amount={`${amountPrefix}${formatBalance(transaction.amount, currency)}`}
-                            currency={currency}
-                            postings={(transaction.cashPostings || []).filter(posting =>
-                              accountFilter === "all" || posting.accountId === Number(accountFilter)
-                            )}
-                            amountClassName={cn(
-                              isPending ? "text-amber-800" :
-                                direction === "incoming" ? "text-emerald-800" :
-                                  direction === "outgoing" ? "text-rose-800" : "text-foreground"
-                            )}
-                            showAccountNames={isInternal && accountFilter === "all"}
-                          />
-                        </div>
+
+                      <div className="min-w-0">
+                        <p className="break-words text-sm font-medium text-slate-900 dark:text-foreground [overflow-wrap:anywhere]">
+                          {description || "Transaction"}
+                        </p>
+                        <p className="mt-1 break-words text-xs text-slate-500 dark:text-muted-foreground [overflow-wrap:anywhere]">
+                          <span>{accountText}</span>
+                          <span className="md:hidden">
+                            <span aria-hidden="true"> · </span>
+                            <span className="font-mono">{formattedDate}</span>
+                            <span aria-hidden="true"> · </span>
+                            <span className={cn("font-semibold capitalize", isPending ? "text-amber-700 dark:text-amber-300" : "text-slate-600 dark:text-muted-foreground")}>
+                              {transaction.status}
+                            </span>
+                          </span>
+                        </p>
+                      </div>
+
+                      <div className="hidden md:block">
+                        <span className={cn(
+                          "text-xs font-semibold capitalize",
+                          isPending
+                            ? "text-amber-700 dark:text-amber-300"
+                            : transaction.status === "completed"
+                              ? "text-emerald-700 dark:text-emerald-400"
+                              : "text-slate-600 dark:text-muted-foreground"
+                        )}>
+                          {transaction.status}
+                        </span>
+                      </div>
+
+                      <div className="flex min-w-0 shrink-0 flex-col items-end text-right">
+                        <TransactionAmountBalance
+                          amount={`${amountPrefix}${formatBalance(transaction.amount, currency)}`}
+                          currency={currency}
+                          postings={(transaction.cashPostings || []).filter(posting =>
+                            accountFilter === "all" || posting.accountId === Number(accountFilter)
+                          )}
+                          amountClassName={cn(
+                            "text-sm font-semibold",
+                            isPending ? "text-amber-700 dark:text-amber-300" :
+                              direction === "incoming" ? "text-emerald-700 dark:text-emerald-400" :
+                                direction === "outgoing" ? "text-slate-900 dark:text-foreground" : "text-slate-600 dark:text-muted-foreground"
+                          )}
+                          showAccountNames={isInternal && accountFilter === "all"}
+                        />
                       </div>
                     </article>
                   );
                 })}
               </div>
-              <footer className="flex flex-col gap-3 border-t border-border/60 bg-muted/15 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-                <p className="text-xs text-muted-foreground" aria-live="polite" data-testid="transactions-pagination-summary">
+              <footer className="flex flex-col gap-3 border-t border-slate-100 dark:border-border bg-slate-50/70 dark:bg-muted/15 px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-slate-500 dark:text-muted-foreground" aria-live="polite" data-testid="transactions-pagination-summary">
                   Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filteredTransactions.length)} of {filteredTransactions.length}
                 </p>
                 <nav className="flex items-center justify-between gap-2 sm:justify-end" aria-label="Transaction pages" data-testid="transactions-pagination">
                   <Button
                     variant="outline"
                     size="sm"
-                    className="min-h-9 rounded-sm"
+                    className="min-h-9 rounded-md border-slate-200 dark:border-border text-xs"
                     disabled={currentPage <= 1}
                     onClick={() => setPage(value => Math.max(1, value - 1))}
                     data-testid="transactions-previous-page"
                   >
                     Previous
                   </Button>
-                  <span className="min-w-20 text-center text-xs tabular-nums text-muted-foreground">
+                  <span className="min-w-20 text-center text-xs tabular-nums text-slate-500 dark:text-muted-foreground">
                     Page {currentPage} of {pageCount}
                   </span>
                   <Button
                     variant="outline"
                     size="sm"
-                    className="min-h-9 rounded-sm"
+                    className="min-h-9 rounded-md border-slate-200 dark:border-border text-xs"
                     disabled={currentPage >= pageCount}
                     onClick={() => setPage(value => Math.min(pageCount, value + 1))}
                     data-testid="transactions-next-page"

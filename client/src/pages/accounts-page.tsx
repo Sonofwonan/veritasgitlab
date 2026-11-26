@@ -40,9 +40,9 @@ function categoryOf(type: string): keyof typeof CATEGORY_META {
 }
 
 const CATEGORY_META = {
-  cash:       { label: 'Cash & Deposits',        Icon: Landmark,   color: 'text-sky-800 dark:text-sky-300' },
+  cash:       { label: 'Cash & Deposits',        Icon: Landmark,   color: 'text-slate-700 dark:text-slate-300' },
   investment: { label: 'Brokerage & Retirement', Icon: TrendingUp, color: 'text-emerald-800 dark:text-emerald-300' },
-  business:   { label: 'Business & Trust',        Icon: Briefcase,  color: 'text-amber-800 dark:text-amber-300' },
+  business:   { label: 'Business & Trust',       Icon: Briefcase,  color: 'text-amber-800 dark:text-amber-300' },
 };
 
 const ACCOUNT_TYPE_OPTIONS = [
@@ -220,34 +220,33 @@ export default function AccountsPage() {
 
       {/* Feedback dialog */}
       <Dialog open={!!feedback} onOpenChange={o => !o && setFeedback(null)}>
-        <DialogContent className="sm:max-w-sm border-primary/20 bg-zinc-950 text-white">
+        <DialogContent className="sm:max-w-sm border-slate-200 dark:border-border bg-white dark:bg-card text-slate-900 dark:text-foreground">
           <DialogHeader className="flex flex-col items-center gap-4 py-4">
             {feedback?.type === 'success'
-              ? <div className="w-14 h-14 rounded-full bg-emerald-500/20 flex items-center justify-center border border-emerald-500/40"><CheckCircle2 className="w-7 h-7 text-emerald-400" /></div>
-              : <div className="w-14 h-14 rounded-full bg-rose-500/20 flex items-center justify-center border border-rose-500/40"><AlertCircle className="w-7 h-7 text-rose-400" /></div>
+              ? <div className="w-12 h-12 rounded-full bg-emerald-50 dark:bg-emerald-950/40 flex items-center justify-center border border-emerald-200 dark:border-emerald-800/40"><CheckCircle2 className="w-6 h-6 text-emerald-700 dark:text-emerald-400" /></div>
+              : <div className="w-12 h-12 rounded-full bg-rose-50 dark:bg-rose-950/40 flex items-center justify-center border border-rose-200 dark:border-rose-800/40"><AlertCircle className="w-6 h-6 text-rose-700 dark:text-rose-400" /></div>
             }
-            <DialogTitle className="text-lg font-serif text-center">{feedback?.title}</DialogTitle>
-            <DialogDescription className="text-zinc-400 text-center text-sm leading-relaxed">{feedback?.message}</DialogDescription>
+            <DialogTitle className="text-xl font-serif text-center">{feedback?.title}</DialogTitle>
+            <DialogDescription className="text-slate-600 dark:text-muted-foreground text-center text-sm leading-relaxed">{feedback?.message}</DialogDescription>
           </DialogHeader>
-          <DialogFooter className="sm:justify-center pt-2">
-            <Button onClick={() => setFeedback(null)} className="bg-primary hover:bg-primary/90 text-white rounded-sm px-8">Close</Button>
+          <DialogFooter className="sm:justify-center pt-1">
+            <Button onClick={() => setFeedback(null)} className="bg-[#0B2218] hover:bg-[#133526] text-white rounded-md px-8">Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Open Account Form Dialog */}
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto bg-[#0B2218] wealth-panel border-white/10 text-white">
+        <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto bg-white dark:bg-card border-slate-200 dark:border-border text-slate-900 dark:text-foreground">
           <DialogHeader>
-            <DialogTitle className="font-serif text-xl text-white flex items-center gap-2">
+            <DialogTitle className="font-serif text-2xl text-slate-900 dark:text-foreground flex items-center gap-2">
               Open Account
               <InfoTip
                 label="Account opening review details"
                 content="Additional accounts undergo compliance and administrative review before provisioning."
-                className="border-white/20 bg-white/10 text-white/80 hover:text-white"
               />
             </DialogTitle>
-            <DialogDescription className="sr-only">
+            <DialogDescription className="text-xs text-slate-500 dark:text-muted-foreground">
               Submit an account application for administrative review.
             </DialogDescription>
           </DialogHeader>
@@ -255,22 +254,22 @@ export default function AccountsPage() {
           <form onSubmit={handleSubmitRequest} className="space-y-4 py-2">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label htmlFor="req-account-type" className="label-caps text-white/60 block">
+                <label htmlFor="req-account-type" className="text-xs font-medium text-slate-600 dark:text-muted-foreground block">
                   Account Type
                 </label>
                 <Select
                   value={requestForm.accountType}
                   onValueChange={(v) => setRequestForm(f => ({ ...f, accountType: v as AccountType }))}
                 >
-                  <SelectTrigger id="req-account-type" className="bg-white/5 border-white/15 text-white rounded-sm h-10" data-testid="select-request-account-type">
+                  <SelectTrigger id="req-account-type" className="rounded-md h-10 border-slate-200 dark:border-border bg-white dark:bg-background" data-testid="select-request-account-type">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-[#0B2218] wealth-panel border-white/10 text-white">
+                  <SelectContent>
                     {ACCOUNT_TYPE_OPTIONS.map(group => (
                       <div key={group.group}>
-                        <p className="px-2 pt-2 pb-1 text-[10px] uppercase tracking-widest text-white/40 font-semibold">{group.group}</p>
+                        <p className="px-2 pt-2 pb-1 text-[11px] font-semibold text-muted-foreground">{group.group}</p>
                         {group.items.map(item => (
-                          <SelectItem key={item} value={item} className="text-white/85 focus:bg-white/10 focus:text-white rounded-sm">{item}</SelectItem>
+                          <SelectItem key={item} value={item}>{item}</SelectItem>
                         ))}
                       </div>
                     ))}
@@ -279,8 +278,8 @@ export default function AccountsPage() {
               </div>
 
               <div className="space-y-1.5">
-                <label htmlFor="req-display-name" className="label-caps text-white/60 block">
-                  Nickname <span className="normal-case text-white/40">(optional)</span>
+                <label htmlFor="req-display-name" className="text-xs font-medium text-slate-600 dark:text-muted-foreground block">
+                  Nickname <span className="text-slate-400 dark:text-muted-foreground/70">(optional)</span>
                 </label>
                 <Input
                   id="req-display-name"
@@ -289,120 +288,120 @@ export default function AccountsPage() {
                   value={requestForm.requestedDisplayName}
                   onChange={e => setRequestForm(f => ({ ...f, requestedDisplayName: e.target.value }))}
                   placeholder="e.g. Family Trust"
-                  className="bg-white/5 border-white/15 text-white placeholder:text-white/30 rounded-sm h-10"
+                  className="rounded-md h-10 border-slate-200 dark:border-border"
                   data-testid="input-request-display-name"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label htmlFor="req-ownership-structure" className="label-caps text-white/60 block">
+                <label htmlFor="req-ownership-structure" className="text-xs font-medium text-slate-600 dark:text-muted-foreground block">
                   Ownership
                 </label>
                 <Select
                   value={requestForm.ownershipStructure}
                   onValueChange={(v) => setRequestForm(f => ({ ...f, ownershipStructure: v }))}
                 >
-                  <SelectTrigger id="req-ownership-structure" className="bg-white/5 border-white/15 text-white rounded-sm h-10">
+                  <SelectTrigger id="req-ownership-structure" className="rounded-md h-10 border-slate-200 dark:border-border bg-white dark:bg-background">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-[#0B2218] wealth-panel border-white/10 text-white">
+                  <SelectContent>
                     {OWNERSHIP_STRUCTURES.map(item => (
-                      <SelectItem key={item} value={item} className="text-white/85 focus:bg-white/10 focus:text-white rounded-sm">{item}</SelectItem>
+                      <SelectItem key={item} value={item}>{item}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="space-y-1.5">
-                <label htmlFor="req-jurisdiction" className="label-caps text-white/60 block">
+                <label htmlFor="req-jurisdiction" className="text-xs font-medium text-slate-600 dark:text-muted-foreground block">
                   Jurisdiction
                 </label>
                 <Select
                   value={requestForm.jurisdiction}
                   onValueChange={(v) => setRequestForm(f => ({ ...f, jurisdiction: v }))}
                 >
-                  <SelectTrigger id="req-jurisdiction" className="bg-white/5 border-white/15 text-white rounded-sm h-10">
+                  <SelectTrigger id="req-jurisdiction" className="rounded-md h-10 border-slate-200 dark:border-border bg-white dark:bg-background">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-[#0B2218] wealth-panel border-white/10 text-white">
+                  <SelectContent>
                     {JURISDICTIONS.map(item => (
-                      <SelectItem key={item} value={item} className="text-white/85 focus:bg-white/10 focus:text-white rounded-sm">{item}</SelectItem>
+                      <SelectItem key={item} value={item}>{item}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="space-y-1.5">
-                <label htmlFor="req-investment-objective" className="label-caps text-white/60 block">
+                <label htmlFor="req-investment-objective" className="text-xs font-medium text-slate-600 dark:text-muted-foreground block">
                   Objective
                 </label>
                 <Select
                   value={requestForm.investmentObjective}
                   onValueChange={(v) => setRequestForm(f => ({ ...f, investmentObjective: v }))}
                 >
-                  <SelectTrigger id="req-investment-objective" className="bg-white/5 border-white/15 text-white rounded-sm h-10">
+                  <SelectTrigger id="req-investment-objective" className="rounded-md h-10 border-slate-200 dark:border-border bg-white dark:bg-background">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-[#0B2218] wealth-panel border-white/10 text-white">
+                  <SelectContent>
                     {INVESTMENT_OBJECTIVES.map(item => (
-                      <SelectItem key={item} value={item} className="text-white/85 focus:bg-white/10 focus:text-white rounded-sm">{item}</SelectItem>
+                      <SelectItem key={item} value={item}>{item}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="space-y-1.5">
-                <label htmlFor="req-risk-tolerance" className="label-caps text-white/60 block">
+                <label htmlFor="req-risk-tolerance" className="text-xs font-medium text-slate-600 dark:text-muted-foreground block">
                   Risk Level
                 </label>
                 <Select
                   value={requestForm.riskTolerance}
                   onValueChange={(v) => setRequestForm(f => ({ ...f, riskTolerance: v }))}
                 >
-                  <SelectTrigger id="req-risk-tolerance" className="bg-white/5 border-white/15 text-white rounded-sm h-10">
+                  <SelectTrigger id="req-risk-tolerance" className="rounded-md h-10 border-slate-200 dark:border-border bg-white dark:bg-background">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-[#0B2218] wealth-panel border-white/10 text-white">
+                  <SelectContent>
                     {RISK_TOLERANCES.map(item => (
-                      <SelectItem key={item} value={item} className="text-white/85 focus:bg-white/10 focus:text-white rounded-sm">{item}</SelectItem>
+                      <SelectItem key={item} value={item}>{item}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="space-y-1.5">
-                <label htmlFor="req-funding-source" className="label-caps text-white/60 block">
+                <label htmlFor="req-funding-source" className="text-xs font-medium text-slate-600 dark:text-muted-foreground block">
                   Funding Source
                 </label>
                 <Select
                   value={requestForm.fundingSource}
                   onValueChange={(v) => setRequestForm(f => ({ ...f, fundingSource: v }))}
                 >
-                  <SelectTrigger id="req-funding-source" className="bg-white/5 border-white/15 text-white rounded-sm h-10">
+                  <SelectTrigger id="req-funding-source" className="rounded-md h-10 border-slate-200 dark:border-border bg-white dark:bg-background">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-[#0B2218] wealth-panel border-white/10 text-white">
+                  <SelectContent>
                     {FUNDING_SOURCES.map(item => (
-                      <SelectItem key={item} value={item} className="text-white/85 focus:bg-white/10 focus:text-white rounded-sm">{item}</SelectItem>
+                      <SelectItem key={item} value={item}>{item}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="space-y-1.5">
-                <label htmlFor="req-initial-funding" className="label-caps text-white/60 block">
+                <label htmlFor="req-initial-funding" className="text-xs font-medium text-slate-600 dark:text-muted-foreground block">
                   Initial Funding
                 </label>
                 <Select
                   value={requestForm.expectedInitialFunding}
                   onValueChange={(v) => setRequestForm(f => ({ ...f, expectedInitialFunding: v }))}
                 >
-                  <SelectTrigger id="req-initial-funding" className="bg-white/5 border-white/15 text-white rounded-sm h-10">
+                  <SelectTrigger id="req-initial-funding" className="rounded-md h-10 border-slate-200 dark:border-border bg-white dark:bg-background">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-[#0B2218] wealth-panel border-white/10 text-white">
+                  <SelectContent>
                     {INITIAL_FUNDING_TIERS.map(item => (
-                      <SelectItem key={item} value={item} className="text-white/85 focus:bg-white/10 focus:text-white rounded-sm">{item}</SelectItem>
+                      <SelectItem key={item} value={item}>{item}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -410,8 +409,8 @@ export default function AccountsPage() {
             </div>
 
             <div className="space-y-1.5">
-              <label htmlFor="req-additional-notes" className="label-caps text-white/60 block">
-                Notes <span className="normal-case text-white/40">(optional)</span>
+              <label htmlFor="req-additional-notes" className="text-xs font-medium text-slate-600 dark:text-muted-foreground block">
+                Notes <span className="text-slate-400 dark:text-muted-foreground/70">(optional)</span>
               </label>
               <Textarea
                 id="req-additional-notes"
@@ -420,12 +419,12 @@ export default function AccountsPage() {
                 value={requestForm.additionalNotes}
                 onChange={e => setRequestForm(f => ({ ...f, additionalNotes: e.target.value }))}
                 placeholder="Optional advisor instructions"
-                className="bg-white/5 border-white/15 text-white placeholder:text-white/30 rounded-sm min-h-[72px] resize-none"
+                className="rounded-md border-slate-200 dark:border-border min-h-[72px] resize-none"
                 data-testid="input-request-notes"
               />
             </div>
 
-            <div className="flex items-center justify-between gap-3 rounded-sm border border-white/15 bg-white/5 px-3 py-2.5 text-xs text-white/85">
+            <div className="flex items-center justify-between gap-3 rounded-md border border-slate-200 dark:border-border bg-slate-50/75 dark:bg-muted/20 px-3.5 py-2.5 text-xs text-slate-700 dark:text-foreground">
               <label htmlFor="req-client-declaration" className="flex items-center gap-2.5 cursor-pointer">
                 <input
                   id="req-client-declaration"
@@ -441,18 +440,17 @@ export default function AccountsPage() {
               <InfoTip
                 label="Account opening attestation"
                 content="I confirm the mandate and funding information above is accurate and acknowledge that this account will only be provisioned after compliance and administrative approval."
-                className="border-white/20 bg-white/10 text-white/80 hover:text-white"
               />
             </div>
 
             <DialogFooter className="pt-2">
-              <Button type="button" variant="ghost" className="text-white/50 hover:text-white" onClick={() => setIsOpen(false)}>
+              <Button type="button" variant="outline" className="rounded-md border-slate-200 dark:border-border" onClick={() => setIsOpen(false)}>
                 Cancel
               </Button>
               <Button
                 type="submit"
                 disabled={createAccountRequest.isPending || !requestForm.clientDeclarationAccepted}
-                className="bg-white text-[#0B2218] hover:bg-white/90 rounded-sm font-semibold whitespace-nowrap shrink-0"
+                className="bg-[#0B2218] hover:bg-[#133526] text-white rounded-md font-medium whitespace-nowrap shrink-0"
                 data-testid="button-submit-account-request"
               >
                 {createAccountRequest.isPending ? 'Submitting…' : 'Open Account'}
@@ -462,125 +460,122 @@ export default function AccountsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Portfolio Summary Header ──────────────────────────────── */}
-      <div data-testid="accounts-summary-panel" className="bg-[#0B2218] wealth-panel rounded-sm overflow-hidden [container-type:inline-size]">
-        <div className="px-4 py-5 xl:px-8 xl:pt-8 xl:pb-6 border-b border-white/10">
+      {/* ── Page Header ───────────────────────────────────────────── */}
+      <div className="px-0.5">
+        <h1 className="font-serif text-[28px] sm:text-[32px] font-semibold tracking-tight text-slate-900 dark:text-foreground">
+          Accounts &amp; Custody
+        </h1>
+        <p className="text-xs text-slate-500 dark:text-muted-foreground mt-1">
+          Overview of your funded balances, holdings, and account applications
+        </p>
+      </div>
+
+      {/* ── Portfolio Summary Header (Crisp White Private Bank) ───── */}
+      <section
+        data-testid="accounts-summary-panel"
+        aria-label="Accounts summary"
+        className="bg-white dark:bg-card border border-slate-200/90 dark:border-border border-t-2 border-t-[#C6A15B]/80 rounded-lg shadow-xs overflow-hidden [container-type:inline-size]"
+      >
+        <div className="px-5 sm:px-7 py-5 sm:py-6 border-b border-slate-100 dark:border-border">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between xl:gap-4">
             <div className="min-w-0">
-              <p className="label-caps text-white/40 mb-2">Total balance</p>
+              <p className="text-xs font-medium text-slate-500 dark:text-muted-foreground mb-1.5">Total balance</p>
               <div className="flex min-w-0 flex-wrap items-end gap-x-4 gap-y-1">
-                <span className={`min-w-0 max-w-full whitespace-nowrap font-sans font-bold not-italic tabular-nums [font-size:clamp(1.25rem,6cqi,3rem)] tracking-tight ${isTransmitting ? "text-violet-300" : "text-white"}`} data-testid="text-total-balance">
+                <span
+                  className={cn(
+                    "min-w-0 max-w-full whitespace-nowrap font-sans font-semibold tabular-nums [font-size:clamp(1.6rem,4.5cqi,2.75rem)] tracking-tight leading-none",
+                    isTransmitting ? "text-violet-700 dark:text-violet-300" : "text-slate-900 dark:text-foreground"
+                  )}
+                  data-testid="text-total-balance"
+                >
                   {balanceLoading ? "Loading…" : balanceUnavailable ? "Unavailable" : fmt(totalBalance)}
                 </span>
               </div>
-              {isTransmitting && <p className="text-violet-300/60 text-xs mt-1.5 font-mono">Funds in transit to {activeTransfer?.institutionName}</p>}
-              {!balanceLoading && balanceUnavailable && <p role="alert" className="text-red-300 text-xs mt-2">
-                Current balances could not be loaded.
-                <button className="ml-2 underline" onClick={retryBalances}>Retry</button>
-              </p>}
+              {isTransmitting && (
+                <p className="text-violet-700 dark:text-violet-300 text-xs mt-2 font-medium">
+                  Funds in transit to {activeTransfer?.institutionName}
+                </p>
+              )}
+              {!balanceLoading && balanceUnavailable && (
+                <p role="alert" className="text-rose-700 dark:text-rose-400 text-xs mt-2">
+                  Current balances could not be loaded.
+                  <button type="button" className="ml-2 font-medium underline underline-offset-2" onClick={retryBalances}>Retry</button>
+                </p>
+              )}
             </div>
-            <div className="flex w-full flex-wrap items-center justify-end gap-2 xl:w-auto xl:mt-1">
-              <button
+            <div className="flex w-full flex-wrap items-center justify-end gap-2.5 xl:w-auto xl:mt-1">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
                 onClick={() => setHideBalances(h => !h)}
-                className="flex min-h-10 items-center gap-1.5 px-2 text-white/50 hover:text-white/80 transition-colors text-xs uppercase tracking-widest whitespace-nowrap shrink-0"
+                className="min-h-9 rounded-md border-slate-200 dark:border-border bg-white dark:bg-card text-slate-700 dark:text-foreground hover:bg-slate-50 dark:hover:bg-muted text-xs gap-1.5 whitespace-nowrap shrink-0"
                 data-testid="button-toggle-balances"
               >
                 {hideBalances ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
                 {hideBalances ? 'Show' : 'Hide'}
-              </button>
-              <div className="w-px h-4 bg-white/10" />
+              </Button>
               <Button
+                type="button"
                 size="sm"
                 disabled={needsInitialDeposit}
                 onClick={() => setIsOpen(true)}
-                className="min-h-10 bg-white/10 hover:bg-white/20 text-white border border-white/10 rounded-sm text-xs gap-1.5 whitespace-nowrap shrink-0"
+                className="min-h-9 bg-[#0B2218] hover:bg-[#133526] text-white rounded-md text-xs font-medium gap-1.5 whitespace-nowrap shrink-0"
                 data-testid="button-request-account"
               >
-                <Plus className="w-3 h-3" /> Open Account
+                <Plus className="w-3.5 h-3.5" /> Open Account
               </Button>
             </div>
           </div>
         </div>
 
         {/* Category breakdown */}
-        <div className="grid grid-cols-1 divide-y divide-white/10 xl:grid-cols-2 xl:divide-x xl:divide-y-0">
+        <div className="bg-slate-50/70 dark:bg-muted/20 grid grid-cols-1 divide-y divide-slate-200/80 dark:divide-border xl:grid-cols-2 xl:divide-x xl:divide-y-0">
           {[
             { cat: 'cash', label: 'Cash balances', value: cashTotal, Icon: Landmark, sub: 'Across your accounts', loading: isLoading, unavailable: cashUnavailable },
             { cat: 'investment', label: 'Recorded investments', value: investTotal, Icon: TrendingUp, sub: 'Holdings only', loading: investmentsLoading, unavailable: investmentsUnavailable },
           ].map(({ cat, label, value, Icon, sub, loading, unavailable }) => (
-            <div key={label} data-testid={`account-summary-${cat}`} className="flex items-center justify-between gap-4 px-4 py-3 xl:block xl:px-6 xl:py-5">
+            <div key={label} data-testid={`account-summary-${cat}`} className="flex items-center justify-between gap-4 px-5 py-4 xl:block xl:px-7 xl:py-5">
               <div className="min-w-0">
-                <div className="flex items-center gap-2 sm:mb-2">
-                  <Icon className="w-3.5 h-3.5 shrink-0 text-white/30" />
-                  <span className="text-white/40 text-[10px] uppercase tracking-widest font-semibold">{label}</span>
+                <div className="flex items-center gap-2 xl:mb-1">
+                  <Icon className="w-3.5 h-3.5 shrink-0 text-slate-400 dark:text-muted-foreground" />
+                  <span className="text-slate-600 dark:text-muted-foreground text-xs font-medium">{label}</span>
                 </div>
-                <p className="hidden text-white/25 text-[10px] mt-0.5 xl:block">{sub}</p>
+                <p className="hidden text-slate-500 dark:text-muted-foreground/80 text-[11px] xl:block">{sub}</p>
               </div>
-              <p data-testid={`account-summary-balance-${cat}`} className="whitespace-nowrap font-sans font-bold text-sm xl:text-xl text-amber-300 tracking-tight tabular-nums">{loading ? "Loading…" : unavailable ? "Unavailable" : fmt(value)}</p>
+              <p
+                data-testid={`account-summary-balance-${cat}`}
+                className="whitespace-nowrap font-sans font-semibold text-base xl:text-xl text-slate-900 dark:text-foreground tracking-tight tabular-nums xl:mt-1"
+              >
+                {loading ? "Loading…" : unavailable ? "Unavailable" : fmt(value)}
+              </p>
               <p className="sr-only sm:hidden">{sub}</p>
             </div>
           ))}
         </div>
 
-        <div className="accounts-debt-summary border-t border-white/10">
-          <style>{`
-            .accounts-debt-summary > section {
-              border: 0 !important;
-              border-radius: 0 !important;
-              background: transparent !important;
-              color: rgba(255, 255, 255, 0.92);
-            }
-            .accounts-debt-summary h2 {
-              display: none !important;
-            }
-            .accounts-debt-summary > section > div.border-b {
-              display: none !important;
-            }
-            .accounts-debt-summary article {
-              grid-template-columns: minmax(0, 1fr) auto;
-              align-items: center;
-              padding: 0.75rem 1rem;
-            }
-            .accounts-debt-summary article + article {
-              border-color: rgba(255, 255, 255, 0.1) !important;
-            }
-            .accounts-debt-summary article [data-testid^="debt-account-amount-"] {
-              color: #fff !important;
-              font-family: "DM Sans", sans-serif !important;
-              font-style: normal !important;
-              font-size: 1rem !important;
-              font-weight: 700 !important;
-              letter-spacing: -0.025em;
-              font-variant-numeric: tabular-nums;
-              white-space: nowrap !important;
-            }
-            .accounts-debt-summary .text-muted-foreground {
-              color: rgba(255, 255, 255, 0.68) !important;
-            }
-            .accounts-debt-summary [role="alert"] {
-              color: rgba(255, 255, 255, 0.88) !important;
-            }
-            .accounts-debt-summary [role="alert"] button {
-              color: #f3d58a !important;
-            }
-            .accounts-debt-summary [role="status"] > div {
-              background-color: rgba(255, 255, 255, 0.12) !important;
-            }
-          `}</style>
-          <DebtAccountSummary summary={feeSummary.data} accounts={accounts} variant="accounts" loading={feeSummary.isLoading || isLoading}
-            error={feeSummary.isError || accountsError} retry={() => { void feeSummary.refetch(); void refetchAccounts(); }}
-            hidden={hideBalances} currency={currency} />
+        <div className="accounts-debt-summary border-t border-slate-200/80 dark:border-border [&>section]:border-0 [&>section]:rounded-none [&>section]:shadow-none [&>section]:bg-transparent [&>section>div.border-b]:hidden">
+          <DebtAccountSummary
+            summary={feeSummary.data}
+            accounts={accounts}
+            variant="accounts"
+            loading={feeSummary.isLoading || isLoading}
+            error={feeSummary.isError || accountsError}
+            retry={() => { void feeSummary.refetch(); void refetchAccounts(); }}
+            hidden={hideBalances}
+            currency={currency}
+          />
         </div>
-      </div>
+      </section>
 
       {/* ── Activation Notice (only when initial deposit required/pending) ── */}
       {needsInitialDeposit && (
         <div
-          className="rounded-sm border border-primary/25 bg-primary/5 px-4 py-3 mt-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+          className="rounded-lg border border-slate-200/90 dark:border-border bg-white dark:bg-card px-5 py-3.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-xs"
           data-testid="accounts-activation-notice"
         >
-          <div className="flex items-center gap-2 text-xs text-foreground">
-            <Lock className="w-3.5 h-3.5 text-primary shrink-0" />
+          <div className="flex items-center gap-2.5 text-xs text-slate-700 dark:text-foreground">
+            <Lock className="w-3.5 h-3.5 text-[#0B2218] dark:text-primary shrink-0" />
             <span>
               {initialDepositPending
                 ? "Initial deposit pending review — additional accounts unlock after verification."
@@ -594,7 +589,7 @@ export default function AccountsPage() {
           <Button
             size="sm"
             onClick={() => setLocation("/transfers?tab=deposit")}
-            className="rounded-sm text-xs whitespace-nowrap shrink-0"
+            className="bg-[#0B2218] hover:bg-[#133526] text-white rounded-md text-xs whitespace-nowrap shrink-0"
           >
             {initialDepositPending ? "View Deposit" : "Make Initial Deposit"}
           </Button>
@@ -604,26 +599,28 @@ export default function AccountsPage() {
       {/* ── Transfer Lock Banner ──────────────────────────────────── */}
       {activeTransfer && (
         <div className={cn(
-          "rounded-sm border px-4 py-3 flex items-start gap-3 mt-2",
-          isTransmitting ? "bg-violet-950/30 border-violet-500/20"
-          : isLocked     ? "bg-amber-950/30 border-amber-500/20"
-          :                "bg-primary/5 border-primary/15"
+          "rounded-lg border px-5 py-4 flex items-start gap-3.5 shadow-xs",
+          isTransmitting ? "bg-violet-50 border-violet-200 dark:bg-violet-950/30 dark:border-violet-800/40"
+          : isLocked     ? "bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-800/40"
+          :                "bg-white border-slate-200/90 dark:bg-card dark:border-border"
         )}>
           <div className={cn(
-            "w-8 h-8 rounded-sm flex items-center justify-center shrink-0 mt-0.5",
-            isTransmitting ? "bg-violet-500/15" : isLocked ? "bg-amber-500/15" : "bg-primary/15"
+            "w-8 h-8 rounded-md flex items-center justify-center shrink-0 mt-0.5",
+            isTransmitting ? "bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300"
+              : isLocked ? "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300"
+              : "bg-slate-100 dark:bg-muted text-slate-700 dark:text-foreground"
           )}>
             {isTransmitting
-              ? <Building2 className="w-4 h-4 text-violet-400" />
+              ? <Building2 className="w-4 h-4" />
               : isLocked
-              ? <Lock className="w-4 h-4 text-amber-400" />
-              : <Building2 className="w-4 h-4 text-primary/60" />
+              ? <Lock className="w-4 h-4" />
+              : <Building2 className="w-4 h-4" />
             }
           </div>
           <div className="flex-1">
             <p className={cn(
-              "text-xs font-bold uppercase tracking-widest mb-0.5",
-              isTransmitting ? "text-violet-400" : isLocked ? "text-amber-400" : "text-primary"
+              "text-xs font-semibold mb-1",
+              isTransmitting ? "text-violet-900 dark:text-violet-300" : isLocked ? "text-amber-900 dark:text-amber-300" : "text-slate-900 dark:text-foreground"
             )}>
               {isTransmitting
                 ? "Portfolio Transmission in Progress"
@@ -632,12 +629,15 @@ export default function AccountsPage() {
                 : xferStage === 1 ? "Transfer Under Advisor Review" : "Transfer Pending Advisor Review"
               }
             </p>
-            <p className={cn("text-xs leading-relaxed", isTransmitting || isLocked ? "text-white/90" : "text-foreground/80")}>
+            <p className={cn(
+              "text-xs leading-relaxed",
+              isTransmitting ? "text-violet-800/85 dark:text-violet-200/85" : isLocked ? "text-amber-800/85 dark:text-amber-200/85" : "text-slate-600 dark:text-muted-foreground"
+            )}>
               {isTransmitting
-                ? <>Your liquidated portfolio is being transmitted to <strong className={isTransmitting || isLocked ? "text-white" : "text-foreground"}>{activeTransfer.institutionName}</strong>. Balances below reflect the pre-transfer holdings and will clear upon custodian confirmation.</>
+                ? <>Your liquidated portfolio is being transmitted to <strong>{activeTransfer.institutionName}</strong>. Balances below reflect the pre-transfer holdings and will clear upon custodian confirmation.</>
                 : isLocked
-                ? <>Holdings are being liquidated for transfer. All accounts are read-only. Your portfolio is in transit to <strong className={isTransmitting || isLocked ? "text-white" : "text-foreground"}>{activeTransfer.institutionName}</strong>.</>
-                : <>Your transfer request to <strong className={isTransmitting || isLocked ? "text-white" : "text-foreground"}>{activeTransfer.institutionName}</strong> is {xferStage === 1 ? "under advisor review" : "pending review"}. Accounts remain fully accessible until approved.</>
+                ? <>Holdings are being liquidated for transfer. All accounts are read-only. Your portfolio is in transit to <strong>{activeTransfer.institutionName}</strong>.</>
+                : <>Your transfer request to <strong>{activeTransfer.institutionName}</strong> is {xferStage === 1 ? "under advisor review" : "pending review"}. Accounts remain fully accessible until approved.</>
               }
             </p>
           </div>
@@ -646,30 +646,34 @@ export default function AccountsPage() {
 
       {/* ── Account Groups ─────────────────────────────────────────── */}
       {isLoading ? (
-        <div className="space-y-2 mt-2">
-          {[1,2,3].map(i => (
-            <div key={i} className="h-16 bg-muted/40 rounded-sm" />
+        <div className="space-y-3">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="h-20 bg-white dark:bg-card border border-slate-200/80 dark:border-border rounded-lg animate-pulse" />
           ))}
         </div>
       ) : cashUnavailable ? (
-        <p role="alert" className="mt-4 text-sm text-red-700">
-          Account balances could not be loaded. <button className="underline" onClick={() => void refetchAccounts()}>Retry</button>
+        <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-800">
+          Account balances could not be loaded. <button type="button" className="ml-2 font-medium underline" onClick={() => void refetchAccounts()}>Retry</button>
         </p>
       ) : (
-        <div className="space-y-6 mt-2">
+        <div className="space-y-4">
           {grouped.map(({ cat, items }) => {
             const { label, Icon, color } = CATEGORY_META[cat as keyof typeof CATEGORY_META];
             return (
-              <div key={cat} data-testid={`account-group-${cat}`}>
-                <div className="flex flex-col gap-1 mb-1 pb-2 border-b border-border sm:flex-row sm:items-center sm:justify-between">
+              <section
+                key={cat}
+                data-testid={`account-group-${cat}`}
+                className="bg-white dark:bg-card border border-slate-200/90 dark:border-border rounded-lg shadow-xs overflow-hidden"
+              >
+                <div className="bg-slate-50/70 dark:bg-muted/20 px-5 py-3 border-b border-slate-100 dark:border-border flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Icon className={cn('w-3.5 h-3.5', color)} />
-                    <span className="label-caps text-muted-foreground">{label}</span>
-                    <span className="text-[10px] text-muted-foreground/50 font-mono ml-1">({items.length})</span>
+                    <Icon className={cn('w-4 h-4', color)} />
+                    <h2 className="text-sm font-semibold text-slate-900 dark:text-foreground">{label}</h2>
+                    <span className="text-xs text-slate-500 dark:text-muted-foreground font-mono">· {items.length}</span>
                   </div>
                 </div>
 
-                <div className="divide-y divide-border/50">
+                <div className="divide-y divide-slate-100 dark:divide-border/50">
                   {items.map((account) => {
                     const isPending = account.id === primaryAccount?.id && pendingBalance !== 0;
                     const unpaidFees = Number(feeSummary.data?.accounts.find(item => item.accountId === account.id)?.unpaidTotal || 0);
@@ -678,7 +682,7 @@ export default function AccountsPage() {
                         key={account.id}
                         role="link"
                         tabIndex={0}
-                        className="grid grid-cols-1 gap-2 items-center py-4 px-1 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset transition-colors cursor-pointer group xl:grid-cols-[1fr_auto] xl:gap-4"
+                        className="grid grid-cols-1 gap-2 items-center py-4 px-5 hover:bg-slate-50/80 dark:hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset transition-colors cursor-pointer group xl:grid-cols-[1fr_auto] xl:gap-4"
                         onClick={() => setLocation(`/accounts/${account.id}`)}
                         onKeyDown={event => {
                           if (event.key === "Enter" || event.key === " ") {
@@ -688,72 +692,82 @@ export default function AccountsPage() {
                         }}
                         data-testid={`account-row-${account.id}`}
                       >
-                        <div className="flex items-center gap-3 min-w-0 xl:gap-4">
-                          <div className={cn(
-                            'w-9 h-9 rounded-sm flex items-center justify-center shrink-0',
-                            cat === 'investment' ? 'bg-emerald-500/10' :
-                            cat === 'business'   ? 'bg-amber-500/10' : 'bg-sky-500/10'
-                          )}>
-                            <Icon className={cn('w-4 h-4', color)} />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-sm font-semibold text-foreground [overflow-wrap:anywhere]">{accountLabel(account)}</p>
-                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-0.5">
-                              <span className="font-mono text-[10px] text-muted-foreground">{maskAccountNumber(account.accountNumber)}</span>
-                              {isPending && (
-                                <span className="text-[9px] text-amber-800 dark:text-amber-300 font-bold uppercase tracking-wide bg-amber-50 dark:bg-amber-900/20 px-1.5 py-0.5 rounded-sm border border-amber-200 dark:border-amber-800/40">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-slate-900 dark:text-foreground [overflow-wrap:anywhere]">{accountLabel(account)}</p>
+                          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 mt-1 text-xs text-slate-500 dark:text-muted-foreground">
+                            <span className="font-mono">{maskAccountNumber(account.accountNumber)}</span>
+                            {isPending && (
+                              <>
+                                <span aria-hidden="true">·</span>
+                                <span className="text-amber-800 dark:text-amber-300 font-medium">
                                   Pending: {fmt(Math.abs(pendingBalance))}
                                 </span>
-                              )}
-                              {isTransmitting && (
-                                <span className="flex items-center gap-1 text-[9px] text-violet-400 font-bold uppercase tracking-wide bg-violet-500/10 px-1.5 py-0.5 rounded-sm border border-violet-500/20">
-                                  <Building2 className="w-2.5 h-2.5" /> Transmitting
-                                </span>
-                              )}
-                              {isLocked && !isTransmitting && (
-                                <span className="flex items-center gap-1 text-[9px] text-amber-800 dark:text-amber-300 font-bold uppercase tracking-wide bg-amber-500/10 px-1.5 py-0.5 rounded-sm border border-amber-500/20">
-                                  <Lock className="w-2.5 h-2.5" /> Liquidating
-                                </span>
-                              )}
-                              {!isLocked && activeTransfer && (
-                                <span className="text-[9px] text-primary/60 font-bold uppercase tracking-wide bg-primary/5 px-1.5 py-0.5 rounded-sm border border-primary/15">
+                              </>
+                            )}
+                            {isTransmitting && (
+                              <>
+                                <span aria-hidden="true">·</span>
+                                <span className="text-violet-700 dark:text-violet-300 font-medium">Transmitting</span>
+                              </>
+                            )}
+                            {isLocked && !isTransmitting && (
+                              <>
+                                <span aria-hidden="true">·</span>
+                                <span className="text-amber-800 dark:text-amber-300 font-medium">Liquidating</span>
+                              </>
+                            )}
+                            {!isLocked && activeTransfer && (
+                              <>
+                                <span aria-hidden="true">·</span>
+                                <span className="text-slate-700 dark:text-foreground font-medium">
                                   {xferStage === 1 ? "Under Review" : "Transfer Pending"}
                                 </span>
-                              )}
-                            </div>
+                              </>
+                            )}
                           </div>
                         </div>
 
                         <div className="flex min-w-0 items-center justify-between gap-3 xl:justify-end xl:gap-4 xl:shrink-0">
                           <div className="min-w-0 text-right xl:min-w-[140px]">
-                            <p className={cn("whitespace-nowrap font-mono text-[clamp(.82rem,4vw,1rem)] font-semibold tabular-nums xl:text-base", Number(account.balance) < 0 ? "text-red-700 dark:text-red-300" : isTransmitting ? "text-violet-400" : "text-foreground")} data-testid={`balance-${account.id}`}>
+                            <p
+                              className={cn(
+                                "whitespace-nowrap font-sans text-base font-semibold tabular-nums",
+                                Number(account.balance) < 0 ? "text-rose-700 dark:text-rose-400" : isTransmitting ? "text-violet-700 dark:text-violet-300" : "text-slate-900 dark:text-foreground"
+                              )}
+                              data-testid={`balance-${account.id}`}
+                            >
                               {fmt(Number(account.balance))}
                             </p>
-                            {unpaidFees > 0 && <p className="mt-1 text-xs text-rose-800 dark:text-rose-300">
-                              Unpaid fees <span className="font-mono tabular-nums" data-testid={`account-unpaid-fees-${account.id}`}>{fmt(unpaidFees)}</span>
-                            </p>}
+                            {unpaidFees > 0 && (
+                              <p className="mt-1 text-xs text-rose-700 dark:text-rose-300">
+                                Unpaid fees <span className="font-sans font-medium tabular-nums" data-testid={`account-unpaid-fees-${account.id}`}>{fmt(unpaidFees)}</span>
+                              </p>
+                            )}
                           </div>
 
-                          <ChevronRight className="w-4 h-4 shrink-0 text-muted-foreground/30 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
+                          <ChevronRight className="w-4 h-4 shrink-0 text-slate-300 dark:text-muted-foreground/40 group-hover:text-[#0B2218] dark:group-hover:text-foreground group-hover:translate-x-0.5 transition-all" />
                         </div>
                       </div>
                     );
                   })}
                 </div>
-              </div>
+              </section>
             );
           })}
         </div>
       )}
 
       {/* ── Account Opening Requests Tracker ───────────────────────── */}
-      <div className="mt-8" data-testid="account-opening-requests-section">
-        <div className="flex items-center justify-between gap-3 mb-2 pb-2 border-b border-border">
+      <section
+        className="bg-white dark:bg-card border border-slate-200/90 dark:border-border rounded-lg shadow-xs overflow-hidden"
+        data-testid="account-opening-requests-section"
+      >
+        <div className="bg-slate-50/70 dark:bg-muted/20 px-5 py-3 border-b border-slate-100 dark:border-border flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <FileText className="w-3.5 h-3.5 text-primary" />
-            <span className="label-caps text-muted-foreground">Account Requests</span>
+            <FileText className="w-4 h-4 text-slate-500 dark:text-muted-foreground" />
+            <h2 className="text-sm font-semibold text-slate-900 dark:text-foreground">Account Requests</h2>
             {accountRequests && (
-              <span className="text-[10px] text-muted-foreground/60 font-mono">({accountRequests.length})</span>
+              <span className="text-xs text-slate-500 dark:text-muted-foreground font-mono">· {accountRequests.length}</span>
             )}
             <InfoTip
               label="Account requests status"
@@ -764,7 +778,7 @@ export default function AccountsPage() {
             <button
               type="button"
               onClick={() => setIsOpen(true)}
-              className="text-xs font-medium text-primary hover:underline whitespace-nowrap shrink-0"
+              className="text-xs font-medium text-[#0B2218] dark:text-primary hover:underline whitespace-nowrap shrink-0"
             >
               + Open Account
             </button>
@@ -772,20 +786,20 @@ export default function AccountsPage() {
         </div>
 
         {requestsLoading ? (
-          <div className="py-4 text-xs text-muted-foreground">Loading…</div>
+          <div className="px-5 py-5 text-xs text-muted-foreground">Loading…</div>
         ) : !accountRequests || accountRequests.length === 0 ? (
-          <div className="py-6 text-xs text-muted-foreground">
+          <div className="px-5 py-8 text-center text-xs text-slate-500 dark:text-muted-foreground">
             No account requests yet.
           </div>
         ) : (
-          <div className="divide-y divide-border/50">
+          <div className="divide-y divide-slate-100 dark:divide-border/50">
             {accountRequests.map((reqItem) => {
-              const statusStyle =
+              const statusTone =
                 reqItem.status === "approved"
-                  ? "border-emerald-600/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                  ? "text-emerald-700 dark:text-emerald-400"
                   : reqItem.status === "rejected"
-                    ? "border-rose-600/30 bg-rose-500/10 text-rose-700 dark:text-rose-300"
-                    : "border-amber-600/30 bg-amber-500/10 text-amber-800 dark:text-amber-300";
+                    ? "text-rose-700 dark:text-rose-400"
+                    : "text-amber-700 dark:text-amber-400";
               const statusLabel =
                 reqItem.status === "approved"
                   ? "Approved"
@@ -795,24 +809,24 @@ export default function AccountsPage() {
               return (
                 <div
                   key={reqItem.id}
-                  className="py-4 px-1 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3"
+                  className="py-4 px-5 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3"
                   data-testid={`account-request-row-${reqItem.id}`}
                 >
                   <div className="min-w-0 space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-mono text-xs text-muted-foreground">AR-{reqItem.id}</span>
-                      <span className="text-sm font-semibold text-foreground">
+                    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                      <span className="font-mono text-xs text-slate-500 dark:text-muted-foreground">AR-{reqItem.id}</span>
+                      <span className="text-sm font-semibold text-slate-900 dark:text-foreground">
                         {reqItem.requestedDisplayName || reqItem.accountType}
                       </span>
                       {reqItem.requestedDisplayName && (
-                        <span className="text-xs text-muted-foreground">({reqItem.accountType})</span>
+                        <span className="text-xs text-slate-500 dark:text-muted-foreground">({reqItem.accountType})</span>
                       )}
-                      <span className={cn("inline-flex items-center gap-1 rounded-sm border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider whitespace-nowrap", statusStyle)}>
-                        {reqItem.status === "pending" && <Clock className="w-2.5 h-2.5" />}
+                      <span className={cn("inline-flex items-center gap-1 text-xs font-semibold whitespace-nowrap", statusTone)}>
+                        {reqItem.status === "pending" && <Clock className="w-3 h-3" />}
                         {statusLabel}
                       </span>
                     </div>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-slate-500 dark:text-muted-foreground">
                       {reqItem.ownershipStructure} · {reqItem.investmentObjective} · {reqItem.riskTolerance} risk · {reqItem.expectedInitialFunding} ({reqItem.fundingSource}) · {reqItem.jurisdiction}
                     </p>
                     {reqItem.createdAccountNumber && (
@@ -821,12 +835,12 @@ export default function AccountsPage() {
                       </p>
                     )}
                     {reqItem.adminNotes && (
-                      <p className="text-xs text-foreground/80 italic">
+                      <p className="text-xs text-slate-600 dark:text-foreground/80">
                         Review Note: {reqItem.adminNotes}
                       </p>
                     )}
                   </div>
-                  <div className="text-xs text-muted-foreground font-mono whitespace-nowrap shrink-0">
+                  <div className="text-xs text-slate-500 dark:text-muted-foreground font-mono whitespace-nowrap shrink-0">
                     {new Date(reqItem.createdAt).toLocaleDateString("en-CA")}
                   </div>
                 </div>
@@ -834,10 +848,10 @@ export default function AccountsPage() {
             })}
           </div>
         )}
-      </div>
+      </section>
 
       {/* ── Footer note ─────────────────────────────────────────────── */}
-      <div className="mt-8 pt-4 border-t border-border/50 text-[10px] text-muted-foreground/40">
+      <div className="pt-2 pb-1 text-xs text-slate-400 dark:text-muted-foreground/60">
         <span>Veritas Wealth</span>
       </div>
 

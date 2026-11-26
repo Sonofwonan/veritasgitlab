@@ -137,11 +137,11 @@ function TransferForm({
   return (
     <div className="space-y-5">
       {/* Institution header */}
-      <div className="flex items-center gap-3 p-3 rounded-xl bg-accent/5 border border-accent/20">
+      <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/40 border border-border">
         <InstitutionAvatar inst={institution} />
         <div>
           <p className="font-semibold text-sm">{institution.name}</p>
-          <button onClick={onBack} className="text-xs text-muted-foreground hover:text-primary transition-colors flex items-center gap-1 mt-0.5">
+          <button onClick={onBack} className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1 mt-0.5">
             <X className="w-3 h-3" /> Change institution
           </button>
         </div>
@@ -149,14 +149,14 @@ function TransferForm({
 
       {institution.custom && (
         <div className="space-y-1.5">
-          <Label htmlFor="destination-institution">Receiving financial institution</Label>
+          <Label htmlFor="destination-institution" className="text-xs font-medium text-muted-foreground">Receiving financial institution</Label>
           <Input id="destination-institution" value={institutionName} maxLength={200}
             onChange={e => setInstitutionName(e.target.value)} data-testid="input-destination-institution" />
         </div>
       )}
       <div className="space-y-1.5">
-        <Label htmlFor="destination-country">Destination country or territory</Label>
-        <select id="destination-country" className="w-full border border-input bg-background px-3 py-2 text-sm"
+        <Label htmlFor="destination-country" className="text-xs font-medium text-muted-foreground">Destination country or territory</Label>
+        <select id="destination-country" className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           value={institutionCountry} onChange={e => setInstitutionCountry(e.target.value)} data-testid="select-destination-country">
           <option value="">Select a country or territory</option>
           {DESTINATION_COUNTRIES.map(code => ({ code, name: destinationCountryName(code) }))
@@ -172,20 +172,17 @@ function TransferForm({
       </div>
 
       {/* Portfolio summary */}
-      <div className="rounded-xl border border-primary/20 overflow-hidden">
-        <div className="bg-primary/5 px-4 py-2.5 flex items-center justify-between border-b border-primary/10">
-          <span className="text-xs font-semibold uppercase tracking-widest text-primary">Accounts to Transfer</span>
-          <span className="text-xs font-bold text-primary">
+      <div className="rounded-lg border border-border overflow-hidden">
+        <div className="bg-muted/40 px-4 py-2.5 flex items-center justify-between border-b border-border">
+          <span className="text-xs font-medium text-muted-foreground">Accounts to transfer</span>
+          <span className="text-xs font-semibold tabular-nums text-foreground">
             {formatBalance(totalValue,currency)} total
           </span>
         </div>
-        <div className="divide-y divide-border/40">
+        <div className="divide-y divide-border/60">
           {accounts.map(a => (
             <div key={a.id} className="px-4 py-2.5 flex items-center justify-between" data-testid={`portfolio-account-row-${a.id}`}>
-              <div className="flex items-center gap-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-primary/50" />
-                <span className="text-sm">{accountLabel(a)}</span>
-              </div>
+              <span className="text-sm text-foreground">{accountLabel(a)}</span>
               <span className="text-sm font-medium tabular-nums">
                 {formatBalance(a.balance,currency)}
               </span>
@@ -217,9 +214,9 @@ function TransferForm({
               key={type}
               type="button"
               onClick={() => setHolderType(type)}
-              className={`p-3 rounded-xl border text-left transition-all ${holderType === type
-                ? "border-primary bg-primary/5 text-primary"
-                : "border-border hover:border-primary/40"}`}
+              className={`p-3 rounded-lg border text-left transition-colors ${holderType === type
+                ? "border-[#0B2218] bg-[#0B2218]/5 text-foreground dark:border-emerald-500 dark:bg-emerald-950/30"
+                : "border-border hover:border-foreground/30"}`}
               data-testid={`holder-type-${type}`}
             >
               <p className="font-semibold text-sm">{type === "own" ? "My Own Name" : "Another Person"}</p>
@@ -245,15 +242,15 @@ function TransferForm({
 
       {/* Transfer method */}
       <div className="space-y-2">
-        <Label className="text-xs">Transfer Method</Label>
+        <Label className="text-xs font-medium text-muted-foreground">Transfer method</Label>
         <div className="grid grid-cols-2 gap-2">
           {(["in-kind", "cash"] as const).map(type => (
             <button
               key={type}
               onClick={() => setTransferType(type)}
-              className={`p-3 rounded-xl border text-left transition-all ${transferType === type
-                ? "border-primary bg-primary/5 text-primary"
-                : "border-border hover:border-primary/40"}`}
+              className={`p-3 rounded-lg border text-left transition-colors ${transferType === type
+                ? "border-[#0B2218] bg-[#0B2218]/5 text-foreground dark:border-emerald-500 dark:bg-emerald-950/30"
+                : "border-border hover:border-foreground/30"}`}
               data-testid={`transfer-type-${type}`}
             >
               <p className="font-semibold text-sm">{type === "in-kind" ? "In-Kind" : "Cash"}</p>
@@ -268,7 +265,7 @@ function TransferForm({
       <p className="text-xs text-muted-foreground">This is a request only. Your advisor must verify the destination and transfer method before approval. Transfer support and settlement are not guaranteed.</p>
       {validationError && <p role="alert" className="text-sm text-destructive">{validationError}</p>}
       <Button
-        className="w-full"
+        className="w-full h-10 bg-[#0B2218] hover:bg-[#123324] text-white"
         data-funds-action=""
         disabled={isPending}
         onClick={() => {
@@ -335,8 +332,8 @@ export function InstitutionalTransferModal({
     <Dialog open={open} onOpenChange={v => !v && handleClose()}>
       <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 font-display">
-            <Building2 className="w-5 h-5 text-primary" />
+          <DialogTitle className="flex items-center gap-2 font-serif text-xl font-medium">
+            <Building2 className="w-5 h-5 text-[#0B2218] dark:text-emerald-400" />
             {step === "pick" ? "Select Receiving Institution" :
              step === "form" ? "Full Portfolio Transfer" :
              "Request Submitted"}
