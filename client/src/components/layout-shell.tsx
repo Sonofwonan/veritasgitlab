@@ -3,13 +3,14 @@ import { useAuth } from "@/hooks/use-auth";
 import { useInactivityLogout } from "@/hooks/use-inactivity-logout";
 import { useActiveLiquidation } from "@/hooks/use-liquidation-status";
 import { useFundsAccess } from "@/hooks/use-funds-access";
+import { useClientControls } from "@/hooks/use-client-controls";
 import { fundsActionFeedback } from "@shared/funds-access";
 import { LIQUIDATION_STATUS_UNAVAILABLE } from "@shared/liquidation";
 import { FundsActionDialog } from "@/components/fees/funds-action-dialog";
-import { ShieldAlert, Snowflake, AlertTriangle } from "lucide-react";
+import { ShieldAlert, Snowflake, AlertTriangle, Info, Wrench } from "lucide-react";
 import { SlideOutNavigation, DesktopSidebar } from "@/components/navigation/slide-out-navigation";
 import { Button } from "@/components/ui/button";
-import { 
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -22,9 +23,20 @@ import { useQuery } from "@tanstack/react-query";
 import { bankingPreferencesPath, DEFAULT_BANKING_PREFERENCES, type BankingPreferences } from "@shared/client-settings";
 import { apiRequest } from "@/lib/queryClient";
 
+function noticeBannerStyles(severity: "info" | "warning" | "critical") {
+  if (severity === "critical") {
+    return "bg-rose-950/90 text-rose-50 border-b border-rose-800";
+  }
+  if (severity === "warning") {
+    return "bg-amber-50 dark:bg-amber-950/40 text-amber-950 dark:text-amber-100 border-b border-amber-200 dark:border-amber-800/40";
+  }
+  return "bg-emerald-950/90 text-emerald-50 border-b border-emerald-800/70";
+}
+
 export function LayoutShell({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();
   const { user, logout } = useAuth();
+  const { platform, notice } = useClientControls();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const access = useFundsAccess();
   const { isUnderLiquidation, statusUnavailable, isError: liquidationError, refetch: refetchLiquidation } = useActiveLiquidation();
@@ -41,7 +53,6 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
     ? { title: "Portfolio transfer status unavailable", message: LIQUIDATION_STATUS_UNAVAILABLE.message, retry: true }
     : fundsActionFeedback(access.blocked, access.data, access.isError);
 
-  // Capture marked entry actions before navigation or any submit handler runs.
   const guardFundsAction = (event: React.MouseEvent<HTMLDivElement>) => {
     const target = event.target instanceof Element
       ? event.target.closest<HTMLElement>("[data-funds-action]") : null;
@@ -56,8 +67,35 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
     logout.mutate();
   }, [logout]);
 
-  const sessionMinutes = preferencesQuery.data?.sessionTimeoutMinutes ?? DEFAULT_BANKING_PREFERENCES.sessionTimeoutMinutes;
+  const sessionMinutes = preferencesQuery.data?.sessionTimeoutMinutes ?? platform.defaultSessionTimeoutMinutes ?? DEFAULT_BANKING_PREFERENCES.sessionTimeoutMinutes;
   const { showWarning, secondsLeft, dismiss } = useInactivityLogout(handleAutoLogout, sessionMinutes);
+
+  if (platform.maintenanceMode) {
+    return (
+      <div className="min-h-[100dvh] bg-[#0B2218] text-white flex items-center justify-center p-6" data-testid="maintenance-mode-gate">
+        <div className="max-w-lg w-full border border-emerald-800/60 bg-[#0F2C20] rounded-xl p-8 space-y-4 shadow-xl">
+          <div className="flex items-center gap-3 text-amber-300">
+            <Wrench className="w-6 h-6 shrink-0" />
+            <span className="text-xs uppercase tracking-[0.16em] font-semibold">
+              {platform.portalName} · Scheduled Maintenance
+            </span>
+          </div>
+          <h1 className="font-serif text-3xl font-semibold text-white">Portal Temporarily Paused</h1>
+          <p className="text-sm text-emerald-100/80 leading-relaxed">
+            {platform.maintenanceMessage}
+          </p>
+          <p className="text-xs text-emerald-200/70 pt-2 border-t border-emerald-800/50">
+            For urgent assistance, contact <span className="underline">{platform.advisorEmail}</span>.
+          </p>
+          <div className="pt-2">
+            <Button variant="outline" size="sm" className="border-emerald-700 text-white hover:bg-emerald-900" onClick={() => logout.mutate()}>
+              Sign out
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -67,13 +105,33 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
           <SlideOutNavigation location={location} userName={user?.name}
             open={sidebarOpen} onOpenChange={setSidebarOpen} onNavigate={setLocation} onLogout={() => logout.mutate()} />
 
+          {platform.globalNoticeEnabled && (platform.globalNoticeMessage || platform.globalNoticeTitle) && (
+            <div data-testid="global-admin-notice" className={`${noticeBannerStyles(platform.globalNoticeSeverity)} px-6 py-3 flex items-start gap-3`}>
+              <Info className="w-4 h-4 mt-0.5 shrink-0" />
+              <div>
+                {platform.globalNoticeTitle && <p className="text-sm font-semibold">{platform.globalNoticeTitle}</p>}
+                {platform.globalNoticeMessage && <p className="text-xs opacity-90 mt-0.5">{platform.globalNoticeMessage}</p>}
+              </div>
+            </div>
+          )}
+
+          {notice.enabled && (notice.message || notice.title) && (
+            <div data-testid="client-advisor-notice" className={`${noticeBannerStyles(notice.severity)} px-6 py-3 flex items-start gap-3`}>
+              <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+              <div>
+                {notice.title && <p className="text-sm font-semibold">{notice.title}</p>}
+                {notice.message && <p className="text-xs opacity-90 mt-0.5">{notice.message}</p>}
+              </div>
+            </div>
+          )}
+
           {(user as any)?.accountFrozen && (
             <div className="bg-slate-900 text-white border-b border-slate-800 px-6 py-3 flex items-start gap-3">
               <Snowflake className="w-4 h-4 text-sky-300 mt-0.5 shrink-0" />
               <div>
                 <p className="text-sm font-semibold">Account on hold</p>
                 <p className="text-slate-300 text-xs mt-0.5">
-                  Transfers and account changes are paused. Please contact your advisor at <span className="underline">veritaswealth@accountant.com</span> for help.
+                  Transfers and account changes are paused. Please contact your advisor at <span className="underline">{platform.advisorEmail}</span> for help.
                 </p>
               </div>
             </div>
@@ -94,7 +152,7 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
                 <p className="text-amber-950 dark:text-amber-200 text-sm font-semibold">Portfolio transfer in progress</p>
                 <p className="text-amber-900/80 dark:text-amber-300/80 text-xs mt-0.5">
                   Your portfolio transfer is in progress. Transfers, investing and account changes are paused until it is complete. Contact your advisor at{" "}
-                  <span className="underline">veritaswealth@accountant.com</span> for updates.
+                  <span className="underline">{platform.advisorEmail}</span> for updates.
                 </p>
               </div>
             </div>

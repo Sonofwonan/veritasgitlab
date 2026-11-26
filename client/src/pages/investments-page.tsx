@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
 import { useFundsAccess } from "@/hooks/use-funds-access";
+import { useClientControls } from "@/hooks/use-client-controls";
 import { FundsAccessNotice } from "@/components/fees/funds-access-notice";
 import { useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -47,6 +48,7 @@ export default function InvestmentsPage() {
   const sellMutation = useSellInvestment();
   const { toast } = useToast();
   const { user } = useAuth();
+  const { platform, features } = useClientControls();
   const [, setLocation] = useLocation();
   const initialDepositPending = user?.initialDepositStatus === "pending_review";
   const needsInitialDeposit = user?.initialDepositStatus === "required" || initialDepositPending;
@@ -78,10 +80,14 @@ export default function InvestmentsPage() {
   const [trailingPercent, setTrailingPercent] = useState("");
   const [orderAccount, setOrderAccount] = useState<string>("");
 
-  // Never enable trading from cached quotes or stored holding prices.
-  const pricingBlocked = !MARKET_TRADING_ENABLED;
+  // Trading follows admin platform policy and per-client authorization.
+  const tradingEnabled = Boolean(platform.marketTradingEnabled && features.canTradeInvestments);
+  const pricingBlocked = !tradingEnabled;
+  const pausedBannerText = !platform.marketTradingEnabled
+    ? (platform.marketPausedMessage || "Trading is currently paused. Please contact your advisor.")
+    : "Trading is disabled on your profile. Please contact your advisor.";
   const rejectUnpricedOrder = () => {
-    toast({ title: "Trading paused", description: "Trading is currently paused. Please contact your advisor.", variant: "destructive" });
+    toast({ title: "Trading paused", description: pausedBannerText, variant: "destructive" });
   };
 
   // Trading eligibility is independent of Accounts-page presentation groups:
@@ -219,13 +225,15 @@ export default function InvestmentsPage() {
           </p>
         </header>
 
-        <div
-          role="alert"
-          data-testid="market-trading-paused"
-          className="rounded-lg border border-amber-200/90 dark:border-amber-800/50 bg-amber-50/70 dark:bg-amber-950/25 px-5 py-3.5 text-sm text-amber-950 dark:text-amber-200"
-        >
-          Trading is currently paused. Please contact your advisor.
-        </div>
+        {pricingBlocked && (
+          <div
+            role="alert"
+            data-testid="market-trading-paused"
+            className="rounded-lg border border-amber-200/90 dark:border-amber-800/50 bg-amber-50/70 dark:bg-amber-950/25 px-5 py-3.5 text-sm text-amber-950 dark:text-amber-200"
+          >
+            {pausedBannerText}
+          </div>
+        )}
 
         {needsInitialDeposit ? (
           <div

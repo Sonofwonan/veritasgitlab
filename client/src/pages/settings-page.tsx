@@ -35,6 +35,7 @@ import {
 import { clientBalanceCurrency } from "@shared/balance-currency";
 import { securityPaths } from "@shared/security";
 import { useAuth } from "@/hooks/use-auth";
+import { useClientControls } from "@/hooks/use-client-controls";
 import { LayoutShell } from "@/components/layout-shell";
 import { SecuritySettings } from "@/components/security-settings";
 import { apiRequest } from "@/lib/queryClient";
@@ -192,6 +193,7 @@ function AddressFields({
 
 export default function SettingsPage({ profile = false }: { profile?: boolean } = {}) {
   const { user, logout } = useAuth();
+  const { features } = useClientControls();
   const queryClient = useQueryClient();
   const currency = clientBalanceCurrency(user);
 
@@ -533,14 +535,20 @@ export default function SettingsPage({ profile = false }: { profile?: boolean } 
                   </p>
                 </div>
                 {!editing && !contactQuery.isLoading && !contactQuery.isError && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full gap-2 rounded-md border-slate-200 dark:border-border sm:w-auto"
-                    onClick={startEditing}
-                  >
-                    <PencilLine className="h-3.5 w-3.5" /> Edit details
-                  </Button>
+                  features.canEditContactDetails ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full gap-2 rounded-md border-slate-200 dark:border-border sm:w-auto"
+                      onClick={startEditing}
+                    >
+                      <PencilLine className="h-3.5 w-3.5" /> Edit details
+                    </Button>
+                  ) : (
+                    <span className="text-xs font-medium text-amber-700 dark:text-amber-300">
+                      Managed by advisor
+                    </span>
+                  )
                 )}
               </div>
 
@@ -928,7 +936,8 @@ export default function SettingsPage({ profile = false }: { profile?: boolean } 
                   type="button"
                   size="sm"
                   className="w-full rounded-md bg-[#0B2218] hover:bg-[#133526] text-white sm:w-auto"
-                  disabled={saveNotificationsMutation.isPending}
+                  disabled={saveNotificationsMutation.isPending || !features.canEditPreferences}
+                  title={!features.canEditPreferences ? "Preferences are locked by your administrator" : undefined}
                   onClick={() => {
                     setNotificationsError("");
                     setNotificationsSaved(false);
@@ -939,7 +948,7 @@ export default function SettingsPage({ profile = false }: { profile?: boolean } 
                     });
                   }}
                 >
-                  {saveNotificationsMutation.isPending ? "Saving…" : "Save preferences"}
+                  {saveNotificationsMutation.isPending ? "Saving…" : !features.canEditPreferences ? "Locked by advisor" : "Save preferences"}
                 </Button>
               </div>
             </section>
@@ -1063,7 +1072,8 @@ export default function SettingsPage({ profile = false }: { profile?: boolean } 
                   size="sm"
                   data-testid="button-save-portal-preferences"
                   className="w-full rounded-md bg-[#0B2218] hover:bg-[#133526] text-white sm:w-auto"
-                  disabled={savePortalMutation.isPending}
+                  disabled={savePortalMutation.isPending || !features.canEditPreferences}
+                  title={!features.canEditPreferences ? "Preferences are locked by your administrator" : undefined}
                   onClick={() => {
                     setPortalError("");
                     setPortalSaved(false);
@@ -1073,7 +1083,7 @@ export default function SettingsPage({ profile = false }: { profile?: boolean } 
                     });
                   }}
                 >
-                  {savePortalMutation.isPending ? "Saving…" : "Save display & session settings"}
+                  {savePortalMutation.isPending ? "Saving…" : !features.canEditPreferences ? "Locked by advisor" : "Save display & session settings"}
                 </Button>
               </div>
             </section>

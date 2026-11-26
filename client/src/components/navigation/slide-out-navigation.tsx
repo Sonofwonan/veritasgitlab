@@ -1,9 +1,10 @@
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import {
-  ArrowLeftRight, ChartNoAxesCombined, ChevronRight, CircleHelp, Clock3,
+  ArrowLeftRight, ChartNoAxesCombined, ChevronRight, CircleHelp, Clock3, CreditCard,
   LayoutDashboard, LogOut, Mail, Menu, Settings, Wallet, X,
 } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { useClientControls } from "@/hooks/use-client-controls";
 import "./slide-out-navigation.css";
 
 export const accountRoutes = [
@@ -11,6 +12,7 @@ export const accountRoutes = [
   { icon: Wallet, label: "Accounts", href: "/accounts" },
   { icon: ChartNoAxesCombined, label: "Investments", href: "/investments" },
   { icon: ArrowLeftRight, label: "Transfers", href: "/transfers" },
+  { icon: CreditCard, label: "Cards", href: "/cards" },
   { icon: Clock3, label: "Transaction history", href: "/transactions" },
 ];
 export const personalRoutes = [
@@ -33,6 +35,30 @@ function initialsFor(name?: string | null) {
   return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
 }
 
+function useVisibleRoutes() {
+  const { platform, features } = useClientControls();
+  const visibleAccountRoutes = useMemo(() => {
+    return accountRoutes.filter((route) => {
+      if (route.href === "/accounts") return features.canViewAccounts;
+      if (route.href === "/investments") return features.canViewInvestments;
+      if (route.href === "/transfers") {
+        return features.canTransferInternal || features.canWireExternal || features.canInstitutionalTransfer;
+      }
+      if (route.href === "/cards") return features.canAccessCards;
+      return true;
+    });
+  }, [features]);
+
+  return {
+    visibleAccountRoutes,
+    portalName: platform.portalName || "Veritas Wealth",
+    portalTagline: platform.portalTagline || "Private Banking",
+    advisorName: platform.advisorName || "Private Advisor",
+    advisorEmail: platform.advisorEmail || "veritaswealth@accountant.com",
+    canTransfer: features.canTransferInternal || features.canWireExternal || features.canInstitutionalTransfer,
+  };
+}
+
 export function DesktopSidebar({
   location,
   onNavigate,
@@ -42,6 +68,8 @@ export function DesktopSidebar({
   onNavigate: (href: string) => void;
   onLogout?: () => void;
 }) {
+  const { visibleAccountRoutes, portalName, portalTagline, advisorName, advisorEmail } = useVisibleRoutes();
+
   const renderLinks = (routes: typeof accountRoutes) =>
     routes.map(item => {
       const active = location === item.href || location.startsWith(item.href + "/");
@@ -70,14 +98,14 @@ export function DesktopSidebar({
           <img src="/veritas-logo.png" alt="" />
         </span>
         <span className="qd-brand-copy">
-          <strong>Veritas Wealth</strong>
-          <small>Private Banking</small>
+          <strong>{portalName}</strong>
+          <small>{portalTagline}</small>
         </span>
       </div>
 
       <nav className="qd-nav flex-1 overflow-y-auto" aria-label="Account navigation">
         <p className="qd-section-label">Portfolio</p>
-        <div className="qd-link-list">{renderLinks(accountRoutes)}</div>
+        <div className="qd-link-list">{renderLinks(visibleAccountRoutes)}</div>
         <div className="qd-nav-divider" />
         <p className="qd-section-label">Personal</p>
         <div className="qd-link-list">{renderLinks(personalRoutes)}</div>
@@ -89,9 +117,9 @@ export function DesktopSidebar({
             <CircleHelp size={16} aria-hidden="true" />
           </div>
           <div className="qd-advisor-copy">
-            <span className="qd-advisor-eyebrow">Private Advisor</span>
-            <a href="mailto:veritaswealth@accountant.com">Contact your advisor</a>
-            <span className="qd-advisor-email">veritaswealth@accountant.com</span>
+            <span className="qd-advisor-eyebrow">{advisorName}</span>
+            <a href={`mailto:${advisorEmail}`}>Contact your advisor</a>
+            <span className="qd-advisor-email">{advisorEmail}</span>
           </div>
         </section>
         {onLogout && (
@@ -112,6 +140,8 @@ export function DesktopSidebar({
 
 export function SlideOutNavigation({ location, open, onOpenChange, onNavigate, onLogout, userName }: Props) {
   const previousLocation = useRef(location);
+  const { visibleAccountRoutes, portalName, portalTagline, advisorName, advisorEmail, canTransfer } = useVisibleRoutes();
+
   useEffect(() => {
     if (previousLocation.current !== location) {
       previousLocation.current = location;
@@ -148,21 +178,23 @@ export function SlideOutNavigation({ location, open, onOpenChange, onNavigate, o
             </button>
           </DialogPrimitive.Trigger>
           <div className="qd-breadcrumb" aria-label={`Current page: ${pageLabel}`}>
-            <span className="qd-breadcrumb-label lg:hidden">VERITAS WEALTH</span>
+            <span className="qd-breadcrumb-label lg:hidden">{portalName.toUpperCase()}</span>
             <ChevronRight size={14} className="lg:hidden" aria-hidden="true" />
             <span className="qd-breadcrumb-current" aria-current="page">{pageLabel}</span>
           </div>
         </div>
         <div className="flex items-center gap-2.5 shrink-0">
-          <button
-            type="button"
-            onClick={() => navigate("/transfers")}
-            data-funds-action=""
-            className="hidden sm:inline-flex items-center gap-1.5 h-9 px-3.5 rounded-md border border-slate-200 dark:border-border bg-white dark:bg-card hover:bg-slate-50 dark:hover:bg-muted text-slate-800 dark:text-foreground text-xs font-medium transition-colors whitespace-nowrap shrink-0"
-          >
-            <ArrowLeftRight size={13} aria-hidden="true" />
-            <span>Move funds</span>
-          </button>
+          {canTransfer && (
+            <button
+              type="button"
+              onClick={() => navigate("/transfers")}
+              data-funds-action=""
+              className="hidden sm:inline-flex items-center gap-1.5 h-9 px-3.5 rounded-md border border-slate-200 dark:border-border bg-white dark:bg-card hover:bg-slate-50 dark:hover:bg-muted text-slate-800 dark:text-foreground text-xs font-medium transition-colors whitespace-nowrap shrink-0"
+            >
+              <ArrowLeftRight size={13} aria-hidden="true" />
+              <span>Move funds</span>
+            </button>
+          )}
           <button
             type="button"
             className="inline-flex items-center gap-2.5 h-9 px-2.5 sm:px-3 rounded-md border border-slate-200 dark:border-border bg-white dark:bg-card hover:bg-slate-50 dark:hover:bg-muted text-slate-800 dark:text-foreground text-xs font-medium transition-colors shrink-0"
@@ -185,8 +217,8 @@ export function SlideOutNavigation({ location, open, onOpenChange, onNavigate, o
             <div className="qd-brand">
               <span className="qd-brand-mark"><img src="/veritas-logo.png" alt="" /></span>
               <span className="qd-brand-copy">
-                <DialogPrimitive.Title asChild><strong>Veritas Wealth</strong></DialogPrimitive.Title>
-                <small>Private Banking</small>
+                <DialogPrimitive.Title asChild><strong>{portalName}</strong></DialogPrimitive.Title>
+                <small>{portalTagline}</small>
               </span>
             </div>
             <DialogPrimitive.Close asChild>
@@ -196,7 +228,7 @@ export function SlideOutNavigation({ location, open, onOpenChange, onNavigate, o
           </div>
           <nav className="qd-nav" aria-label="Account navigation">
             <p className="qd-section-label">Portfolio</p>
-            <div className="qd-link-list">{links(accountRoutes)}</div>
+            <div className="qd-link-list">{links(visibleAccountRoutes)}</div>
             <div className="qd-nav-divider" />
             <p className="qd-section-label">Personal</p>
             <div className="qd-link-list">{links(personalRoutes)}</div>
@@ -205,11 +237,11 @@ export function SlideOutNavigation({ location, open, onOpenChange, onNavigate, o
             <section className="qd-advisor" aria-label="Advisor contact">
               <div className="qd-advisor-icon"><CircleHelp size={16} aria-hidden="true" /></div>
               <div className="qd-advisor-copy">
-                <span className="qd-advisor-eyebrow">Private Advisor</span>
-                <a href="mailto:veritaswealth@accountant.com">Contact your advisor</a>
-                <span className="qd-advisor-email">veritaswealth@accountant.com</span>
+                <span className="qd-advisor-eyebrow">{advisorName}</span>
+                <a href={`mailto:${advisorEmail}`}>Contact your advisor</a>
+                <span className="qd-advisor-email">{advisorEmail}</span>
               </div>
-              <a className="qd-email-action" href="mailto:veritaswealth@accountant.com"
+              <a className="qd-email-action" href={`mailto:${advisorEmail}`}
                 aria-label="Email your advisor"><Mail size={16} aria-hidden="true" /></a>
             </section>
             {onLogout && (

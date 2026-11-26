@@ -6,7 +6,7 @@ import { setupAuth } from "./auth";
 import { api, errorSchemas, insertPayeeSchema } from "@shared/routes";
 import { z } from "zod";
 import { type User, accounts, transactions, payees, applications, users, institutionalTransfers, accountSetupTokens, accountOpeningRequests, investments } from "@shared/schema";
-import { db, pool } from "./db";
+import { db, hasDatabaseConfig, pool } from "./db";
 import { and, eq, or, desc, sql, inArray } from "drizzle-orm";
 import twilio from "twilio";
 import passport from "passport";
@@ -35,6 +35,18 @@ import {
   reviewRejectSchema,
 } from "./admin-ledger";
 import { registerAdminDeleteRoutes } from "./admin-delete";
+import {
+  ensureAdminControlTables,
+  getCardsForUser,
+  getClientBankingPreferences,
+  getClientControlRecord,
+  getEffectiveClientControls,
+  getMemoryUserDetails,
+  getMemoryUsersForAdmin,
+  getPlatformSettings,
+  REFERENCE_MARKET_QUOTES,
+  registerAdminControlRoutes,
+} from "./admin-controls";
 
 // Twilio Notification Setup (SMS/WhatsApp)
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
@@ -236,6 +248,12 @@ export async function registerRoutes(
   await registerRecoveryRequests(app, requireAuth, requireAdmin);
   await registerClientSettings(app, requireAuth);
   registerAdminDeleteRoutes(app, pool, requireAdmin);
+  await ensureAdminControlTables(pool);
+  registerAdminControlRoutes(app, pool, requireAdmin, requireAuth, {
+    requireActivatedClient,
+    requireFundsAccess,
+    requireNoLiquidation,
+  });
   app.post(api.auth.register.path, (_req, res) => {
     res.status(410).json({
       message: "Direct registration is disabled. Submit an application and wait for approval.",
@@ -457,8 +475,12 @@ export async function registerRoutes(
   app.post("/api/account-requests", requireAuth, requireActivatedClient, requireFundsAccess, requireNoLiquidation, async (req, res) => {
     res.set("Cache-Control", "no-store");
     try {
-      const input = clientAccountOpeningRequestSchema.parse(req.body);
       const userId = (req.user as User).id;
+      const controls = await getEffectiveClientControls(pool, userId);
+      if (!controls.effective.canOpenAccounts) {
+        return res.status(403).json({ message: "New account requests are currently disabled by your advisor." });
+      }
+      const input = clientAccountOpeningRequestSchema.parse(req.body);
       const [created] = await db
         .insert(accountOpeningRequests)
         .values({
@@ -561,6 +583,11 @@ export async function registerRoutes(
       if (!fromAccount || fromAccount.userId !== (req.user as User).id) {
         return res.status(403).json({ message: "Unauthorized source account" });
       }
+
+      const transferControls = await getEffectiveClientControls(pool, (req.user as User).id);
+      if (!transferControls.effective.canTransferInternal) {
+        return res.status(403).json({ message: "Account transfers are currently disabled for your profile." });
+      }
       
       const transaction = await storage.transferFunds(fromAccountId, toAccountId, amount);
       
@@ -621,15 +648,27 @@ export async function registerRoutes(
 
   app.post(api.investments.buy.path, requireAuth, requireActivatedClient, requireFundsAccess, requireNoLiquidation, async (req, res) => {
     try {
-      const { accountId } = api.investments.buy.input.parse(req.body);
-       // Verify ownership
+      const { accountId, symbol, amount } = api.investments.buy.input.parse(req.body);
+      const userId = (req.user as User).id;
+      // Verify ownership
       const account = await storage.getAccount(accountId);
-      if (!account || account.userId !== (req.user as User).id) {
+      if (!account || account.userId !== userId) {
         return res.status(403).json({ message: "Unauthorized account" });
       }
 
-      // No approved pricing source: stop before any storage/ledger mutation.
-      res.set("Cache-Control", "no-store").status(503).json(MARKET_UNAVAILABLE);
+      const controls = await getEffectiveClientControls(pool, userId);
+      if (!controls.platform.marketTradingEnabled) {
+        return res.set("Cache-Control", "no-store").status(503).json(MARKET_UNAVAILABLE);
+      }
+      if (!controls.effective.canTradeInvestments) {
+        return res.status(403).json({ message: "Investment trading is disabled for your profile." });
+      }
+      const quote = REFERENCE_MARKET_QUOTES[symbol.trim().toUpperCase()];
+      if (!quote) {
+        return res.set("Cache-Control", "no-store").status(503).json(MARKET_UNAVAILABLE);
+      }
+      const investment = await storage.buyAsset(accountId, symbol.trim().toUpperCase(), amount, quote.price);
+      res.status(201).json(investment);
     } catch (err: any) {
       res.status(400).json({ message: err.message || "Buy failed" });
     }
@@ -637,14 +676,31 @@ export async function registerRoutes(
 
   app.post(api.investments.sell.path, requireAuth, requireActivatedClient, requireFundsAccess, requireNoLiquidation, async (req, res) => {
     try {
-      const { accountId } = api.investments.sell.input.parse(req.body);
-       // Verify ownership
+      const { accountId, symbol, shares } = api.investments.sell.input.parse(req.body);
+      const userId = (req.user as User).id;
+      // Verify ownership
       const account = await storage.getAccount(accountId);
-      if (!account || account.userId !== (req.user as User).id) {
+      if (!account || account.userId !== userId) {
         return res.status(403).json({ message: "Unauthorized account" });
       }
 
-      res.set("Cache-Control", "no-store").status(503).json(MARKET_UNAVAILABLE);
+      const controls = await getEffectiveClientControls(pool, userId);
+      if (!controls.platform.marketTradingEnabled) {
+        return res.set("Cache-Control", "no-store").status(503).json(MARKET_UNAVAILABLE);
+      }
+      if (!controls.effective.canTradeInvestments) {
+        return res.status(403).json({ message: "Investment trading is disabled for your profile." });
+      }
+      const normalizedSymbol = symbol.trim().toUpperCase();
+      const quote = REFERENCE_MARKET_QUOTES[normalizedSymbol];
+      const existingHoldings = await storage.getInvestments(accountId);
+      const existing = existingHoldings.find((h) => h.symbol.toUpperCase() === normalizedSymbol);
+      const price = quote?.price ?? (existing ? Number(existing.currentPrice || existing.purchasePrice) : 0);
+      if (!Number.isFinite(price) || price <= 0) {
+        return res.set("Cache-Control", "no-store").status(503).json(MARKET_UNAVAILABLE);
+      }
+      const investment = await storage.sellAsset(accountId, normalizedSymbol, shares, price);
+      res.json(investment);
     } catch (err: any) {
       res.status(400).json({ message: err.message || "Sell failed" });
     }
@@ -784,6 +840,10 @@ export async function registerRoutes(
 
   app.post('/api/payees', requireAuth, requireActivatedClient, requireNoLiquidation, async (req, res) => {
     try {
+      const controls = await getEffectiveClientControls(pool, (req.user as User).id);
+      if (!controls.effective.canAddBeneficiaries) {
+        return res.status(403).json({ message: "Adding beneficiaries is disabled by your administrator." });
+      }
       const fallbackCurrency = isBalanceCurrency((req.user as any)?.displayCurrency)
         ? (req.user as any).displayCurrency
         : "CAD";
@@ -827,6 +887,10 @@ export async function registerRoutes(
   // External Wire / International Payment Route
   app.post('/api/transactions/payment', requireAuth, requireActivatedClient, requireFundsAccess, requireNoLiquidation, async (req, res) => {
     try {
+      const wireControls = await getEffectiveClientControls(pool, (req.user as User).id);
+      if (!wireControls.effective.canWireExternal) {
+        return res.status(403).json({ message: "External wire transfers are currently disabled for your profile." });
+      }
       const { fromAccountId, payeeId, amount, description, wireType, targetCurrency, reference } = z.object({
         fromAccountId: z.coerce.number().int().positive(),
         payeeId: z.coerce.number().int().positive(),
@@ -913,6 +977,10 @@ export async function registerRoutes(
 
   app.post("/api/applications", async (req, res) => {
     try {
+      const platform = await getPlatformSettings(pool);
+      if (!platform.applicationsOpen) {
+        return res.status(403).json({ message: "New client applications are currently closed. Please contact your advisor." });
+      }
       const applicationInput = z.object({
         fullName: z.string().trim().min(2).max(200),
         email: z.string().trim().email().max(254),
@@ -1427,6 +1495,9 @@ export async function registerRoutes(
   // All users with account summary and security posture
   app.get("/api/admin/users", requireAdmin, async (req, res) => {
     try {
+      if (!hasDatabaseConfig) {
+        return res.json(getMemoryUsersForAdmin());
+      }
       const allUsers = await db.select().from(users).orderBy(desc(users.createdAt));
       let mfaByUser = new Map<number, boolean>();
       try {
@@ -1459,6 +1530,11 @@ export async function registerRoutes(
     }
     const userId = parsedId.data;
     try {
+      if (!hasDatabaseConfig) {
+        const memDetails = getMemoryUserDetails(userId);
+        if (!memDetails) return res.status(404).json({ message: "Client profile not found" });
+        return res.json(memDetails);
+      }
       const [userRow] = await db.select().from(users).where(eq(users.id, userId));
       if (!userRow) return res.status(404).json({ message: "Client profile not found" });
       const { password: _password, ...safeClient } = userRow as any;
@@ -1619,6 +1695,11 @@ export async function registerRoutes(
       ]);
 
       const totalBalance = userAccounts.reduce((sum, acc) => sum + Number(acc.balance || 0), 0);
+      const [bankingPreferences, clientControls, userCards] = await Promise.all([
+        getClientBankingPreferences(pool, userId),
+        getClientControlRecord(pool, userId),
+        getCardsForUser(pool, userId),
+      ]);
 
       res.json({
         user: {
@@ -1627,6 +1708,9 @@ export async function registerRoutes(
           totalBalance,
         },
         contactDetails: contactRows[0] ?? null,
+        bankingPreferences,
+        controls: clientControls,
+        cards: userCards,
         security: {
           mfaEnabled: Boolean(securityRows[0]?.mfaEnabled),
           version: Number(securityRows[0]?.version ?? 0),
@@ -1926,6 +2010,10 @@ export async function registerRoutes(
   app.post("/api/institutional-transfers", requireAuth, requireActivatedClient, requireFundsAccess, requireLiquidationVerification, async (req, res) => {
     if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
     try {
+      const instControls = await getEffectiveClientControls(pool, (req.user as User).id);
+      if (!instControls.effective.canInstitutionalTransfer) {
+        return res.status(403).json({ message: "Institutional transfers are currently disabled for your profile." });
+      }
       const destination = institutionalDestinationSchema.safeParse(req.body);
       if (!destination.success) {
         return res.status(400).json({ message: destination.error.issues[0].message });

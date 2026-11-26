@@ -5,7 +5,7 @@ import * as schema from "@shared/schema";
 const { Pool } = pg;
 
 const connectionString = process.env.SUPABASE_DATABASE_URL || process.env.DATABASE_URL;
-export const hasDatabaseConfig = Boolean(connectionString);
+export let hasDatabaseConfig = Boolean(connectionString);
 
 function createMockDb(): NodePgDatabase<typeof schema> {
   const createChainable = (): any => {
@@ -53,27 +53,70 @@ function createMockPool(): pg.Pool {
   } as unknown as pg.Pool;
 }
 
-let pool: pg.Pool;
-let db: NodePgDatabase<typeof schema>;
+let activePool: pg.Pool;
+let activeDb: NodePgDatabase<typeof schema>;
 
 if (connectionString) {
   try {
     const maskedUrl = connectionString.replace(/:\/\/.*@/, "://****:****@");
     console.log(`[db] Connecting to database: ${maskedUrl}`);
-    pool = new Pool({
+    const realPool = new Pool({
       connectionString,
-      ssl: { rejectUnauthorized: false },
+      connectionTimeoutMillis: 2500,
+      ssl: connectionString.includes("127.0.0.1") || connectionString.includes("localhost")
+        ? false
+        : { rejectUnauthorized: false },
     });
-    db = drizzle(pool, { schema });
+    realPool.on("error", (err) => {
+      console.warn("[db] Unexpected database pool error:", err.message);
+    });
+    activePool = realPool;
+    activeDb = drizzle(realPool, { schema });
   } catch (err) {
     console.warn("[db] Failed to initialize Postgres pool — using in-memory mock:", err);
-    pool = createMockPool();
-    db = createMockDb();
+    hasDatabaseConfig = false;
+    activePool = createMockPool();
+    activeDb = createMockDb();
   }
 } else {
   console.warn("[db] DATABASE_URL not configured — running with in-memory database mock");
-  pool = createMockPool();
-  db = createMockDb();
+  activePool = createMockPool();
+  activeDb = createMockDb();
 }
+
+export async function verifyDatabaseConnection(): Promise<boolean> {
+  if (!hasDatabaseConfig) return false;
+  try {
+    await activePool.query("SELECT 1");
+    return true;
+  } catch (err: any) {
+    console.warn(
+      `[db] Database unreachable (${err?.code || err?.message || "connection error"}) — falling back to in-memory database mock`,
+    );
+    const oldPool = activePool;
+    hasDatabaseConfig = false;
+    activePool = createMockPool();
+    activeDb = createMockDb();
+    oldPool.end().catch(() => {});
+    return false;
+  }
+}
+
+const pool = new Proxy({} as pg.Pool, {
+  get(_target, prop) {
+    const value = (activePool as any)[prop];
+    return typeof value === "function" ? value.bind(activePool) : value;
+  },
+});
+
+const db = new Proxy((() => {}) as unknown as NodePgDatabase<typeof schema>, {
+  get(_target, prop) {
+    const value = (activeDb as any)[prop];
+    return typeof value === "function" ? value.bind(activeDb) : value;
+  },
+  apply(_target, thisArg, argArray) {
+    return (activeDb as any).apply(thisArg, argArray);
+  },
+});
 
 export { pool, db };

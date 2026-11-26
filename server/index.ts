@@ -1,5 +1,6 @@
 import express, { type Request, Response, NextFunction } from "express";
 import cors from "cors";
+import { verifyDatabaseConnection } from "./db";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -95,6 +96,7 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  await verifyDatabaseConnection();
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
@@ -119,7 +121,10 @@ app.use((req, res, next) => {
   // Other ports are firewalled. Default to 5000 if not specified.
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
-  const port = parseInt(process.env.PORT || "3000", 10);
+  const port =
+    process.env.PORT && process.env.PORT !== process.env.NGINX_PORT
+      ? parseInt(process.env.PORT, 10)
+      : parseInt(process.env.DEFAULT_APP_PORT || "3000", 10);
   httpServer.listen(
     {
       port,

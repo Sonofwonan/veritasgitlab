@@ -39,6 +39,7 @@ export const users = pgTable("users", {
   frozenAt: timestamp("frozen_at"),
   initialDepositStatus: text("initial_deposit_status", { enum: ["required", "pending_review", "completed"] }).notNull().default("completed"),
   selectedInitialDeposit: text("selected_initial_deposit"),
+  advisorNotes: text("advisor_notes"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -339,5 +340,38 @@ export type InsertAccount = z.infer<typeof insertAccountSchema>;
 export type InsertPayee = z.infer<typeof insertPayeeSchema>;
 export type InsertTransaction = z.infer<typeof insertTransactionSchema>;
 export type InsertInvestment = z.infer<typeof insertInvestmentSchema>;
+
+export const platformSettings = pgTable("platform_settings", {
+  id: integer("id").primaryKey().default(1),
+  settingsJson: text("settings_json").notNull(),
+  updatedByStaffName: text("updated_by_staff_name"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const clientControls = pgTable("client_controls", {
+  userId: integer("user_id").primaryKey(),
+  featuresJson: text("features_json").notNull(),
+  noticeJson: text("notice_json").notNull(),
+  updatedByStaffName: text("updated_by_staff_name"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const clientCards = pgTable("client_cards", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  accountId: integer("account_id"),
+  cardKind: text("card_kind").notNull().default("virtual"),
+  label: text("label").notNull(),
+  last4: text("last4").notNull(),
+  expiry: text("expiry").notNull(),
+  network: text("network").notNull().default("Visa"),
+  status: text("status").notNull().default("active"),
+  fraudProtection: boolean("fraud_protection").notNull().default(true),
+  dailyLimit: numeric("daily_limit").notNull().default("10000"),
+  onlinePayments: boolean("online_payments").notNull().default(true),
+  internationalSpend: boolean("international_spend").notNull().default(true),
+  adminNotes: text("admin_notes"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
 
 export * from "./fee-schema";

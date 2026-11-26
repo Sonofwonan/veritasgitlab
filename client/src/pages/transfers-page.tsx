@@ -40,6 +40,7 @@ import {
   useTransfer,
 } from "@/hooks/use-finances";
 import { useFundsAccess } from "@/hooks/use-funds-access";
+import { useClientControls } from "@/hooks/use-client-controls";
 import { useActiveLiquidation } from "@/hooks/use-liquidation-status";
 import { useToast } from "@/hooks/use-toast";
 import { accountLabel, maskAccountNumber, transactionDate } from "@shared/account-display";
@@ -97,6 +98,7 @@ function StatusLabel({ status }: { status: string }) {
 
 export default function TransfersPage() {
   const { user } = useAuth();
+  const { features } = useClientControls();
   const [location] = useLocation();
   const { toast } = useToast();
   const access = useFundsAccess();
@@ -377,18 +379,18 @@ export default function TransfersPage() {
     );
   }
 
-  const tabs: Array<{ id: TransferTab; label: string; icon: any }> = needsInitialDeposit
+  const tabs: Array<{ id: TransferTab; label: string; icon: any }> = (needsInitialDeposit
     ? [
-        { id: "deposit", label: "Initial Deposit", icon: Landmark },
-        { id: "wire", label: "Wire & International", icon: Globe2 },
-        { id: "internal", label: "Internal Transfer", icon: ArrowLeftRight },
-        { id: "institutional", label: "Institutional", icon: Building2 },
+        { id: "deposit" as const, label: "Initial Deposit", icon: Landmark },
+        ...(features.canWireExternal ? [{ id: "wire" as const, label: "Wire & International", icon: Globe2 }] : []),
+        ...(features.canTransferInternal ? [{ id: "internal" as const, label: "Internal Transfer", icon: ArrowLeftRight }] : []),
+        ...(features.canInstitutionalTransfer ? [{ id: "institutional" as const, label: "Institutional", icon: Building2 }] : []),
       ]
     : [
-        { id: "wire", label: "Wire & International", icon: Globe2 },
-        { id: "internal", label: "Internal Transfer", icon: ArrowLeftRight },
-        { id: "institutional", label: "Institutional", icon: Building2 },
-      ];
+        ...(features.canWireExternal ? [{ id: "wire" as const, label: "Wire & International", icon: Globe2 }] : []),
+        ...(features.canTransferInternal ? [{ id: "internal" as const, label: "Internal Transfer", icon: ArrowLeftRight }] : []),
+        ...(features.canInstitutionalTransfer ? [{ id: "institutional" as const, label: "Institutional", icon: Building2 }] : []),
+      ]);
 
   const fieldClass = "w-full h-10 rounded-md border border-slate-200 dark:border-border bg-white dark:bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring";
   const labelClass = "text-xs font-medium text-slate-600 dark:text-muted-foreground block";
@@ -508,14 +510,16 @@ export default function TransfersPage() {
                         <label htmlFor="wire-beneficiary" className={labelClass}>
                           Beneficiary
                         </label>
-                        <button
-                          type="button"
-                          onClick={openAddBeneficiaryModal}
-                          className="text-xs font-medium text-[#0B2218] dark:text-primary hover:underline whitespace-nowrap shrink-0"
-                          data-testid="button-open-add-beneficiary"
-                        >
-                          + Add Beneficiary
-                        </button>
+                        {features.canAddBeneficiaries && (
+                          <button
+                            type="button"
+                            onClick={openAddBeneficiaryModal}
+                            className="text-xs font-medium text-[#0B2218] dark:text-primary hover:underline whitespace-nowrap shrink-0"
+                            data-testid="button-open-add-beneficiary"
+                          >
+                            + Add Beneficiary
+                          </button>
+                        )}
                       </div>
                       <select
                         id="wire-beneficiary"

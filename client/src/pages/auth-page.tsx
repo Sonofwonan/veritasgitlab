@@ -118,7 +118,7 @@ function ApplicationForm({ onBack }: { onBack: () => void }) {
       fullName: "", email: "", phone: "", dateOfBirth: "", nationality: "",
       address: "", city: "", country: "", employmentStatus: "", annualIncome: "",
       investmentExperience: "", riskTolerance: "", investmentGoal: "",
-      initialDeposit: "", customInitialDeposit: "", preferredCurrency: "CAD", sourceOfFunds: "",
+      initialDeposit: "", customInitialDeposit: "", preferredCurrency: "USD", sourceOfFunds: "",
     },
     mode: "onTouched",
   });
@@ -211,7 +211,7 @@ function ApplicationForm({ onBack }: { onBack: () => void }) {
                 <TextInput id="app-email" reg={register("email")} type="email" placeholder="you@example.com" autoComplete="email" />
               </Field>
               <Field id="app-phone" label="Phone number" error={errors.phone?.message}>
-                <TextInput id="app-phone" reg={register("phone")} placeholder="+1 555 000 0000" />
+                <TextInput id="app-phone" reg={register("phone")} placeholder="+44 20 7946 0820" />
               </Field>
               <Field id="app-dob" label="Date of birth" error={errors.dateOfBirth?.message}>
                 <TextInput id="app-dob" reg={register("dateOfBirth")} type="date" />
@@ -232,11 +232,11 @@ function ApplicationForm({ onBack }: { onBack: () => void }) {
           <div className="space-y-6">
             <p className="font-serif text-xl">Where are you based?</p>
             <Field id="app-address" label="Street address" error={errors.address?.message}>
-              <TextInput id="app-address" reg={register("address")} placeholder="123 Main Street" autoComplete="street-address" />
+              <TextInput id="app-address" reg={register("address")} placeholder="Street address & suite" autoComplete="street-address" />
             </Field>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-6">
               <Field id="app-city" label="City" error={errors.city?.message}>
-                <TextInput id="app-city" reg={register("city")} placeholder="Toronto" />
+                <TextInput id="app-city" reg={register("city")} placeholder="e.g. Zurich, London, Singapore" />
               </Field>
               <Field id="app-country" label="Country of residence" error={errors.country?.message}>
                 <SelectInput
@@ -279,7 +279,7 @@ function ApplicationForm({ onBack }: { onBack: () => void }) {
                 <TextInput
                   id="app-customDeposit"
                   reg={register("customInitialDeposit")}
-                  placeholder="e.g. 15000"
+                  placeholder="e.g. 250000"
                 />
               </Field>
             )}
@@ -434,53 +434,105 @@ export default function AuthPage() {
     <div className="min-h-screen flex flex-col lg:flex-row bg-cream">
 
       {/* Left panel */}
-      <div className="hidden lg:flex lg:w-[42%] xl:w-[38%] shrink-0 flex-col justify-between p-12 xl:p-16 bg-primary wealth-panel text-primary-foreground relative overflow-hidden">
-        <div className="absolute inset-0 opacity-[0.04]"
-          style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E\")" }}
+      <div className="hidden lg:flex lg:w-[42%] xl:w-[38%] shrink-0 flex-col justify-between p-12 xl:p-16 bg-[#0D2418] wealth-panel text-[#F6F1E8] relative overflow-hidden border-r border-[#C6A15B]/20">
+        <img
+          src="/assets/vault_custody_1795696130118.jpg"
+          alt="Veritas Wealth private banking custody vault architecture"
+          referrerPolicy="no-referrer"
+          className="absolute inset-0 h-full w-full object-cover opacity-25 mix-blend-luminosity pointer-events-none"
+        />
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background:
+              "linear-gradient(170deg, rgba(13,36,24,0.92) 0%, rgba(13,36,24,0.82) 50%, rgba(9,25,17,0.96) 100%)",
+          }}
         />
 
         <div className="relative z-10">
-          <div className="flex items-center gap-2.5 mb-16">
-            <img src="/veritas-logo.png" alt="" className="w-10 h-10 object-contain" />
-            <span className="font-serif text-lg font-medium">Veritas Wealth</span>
-          </div>
+          <a
+            href="/"
+            onClick={(e) => {
+              e.preventDefault();
+              setLocation("/");
+            }}
+            className="inline-flex items-center gap-3 mb-14 group"
+          >
+            <img src="/veritas-logo.png" alt="Veritas Wealth crest" className="w-10 h-10 object-contain" />
+            <div>
+              <span className="font-serif text-lg font-medium tracking-tight text-[#F6F1E8] block leading-none">
+                Veritas Wealth
+              </span>
+              <span className="text-[10px] uppercase tracking-[0.22em] text-[#DFBD76] mt-1 block">
+                Global Private Banking
+              </span>
+            </div>
+          </a>
 
-          <div className="space-y-6 max-w-xs">
-            <h1 className="font-serif leading-tight" style={{ fontSize: "clamp(2rem, 3.5vw, 2.8rem)" }}>
-              Your wealth,<br />
-              managed with<br />
-              <em>precision</em> and care.
+          <div className="space-y-6 max-w-sm">
+            <p className="text-[11px] uppercase tracking-[0.22em] text-[#DFBD76] font-medium">
+              Zurich · London · Singapore · New York
+            </p>
+            <h1 className="font-serif leading-[1.05] text-[#F6F1E8]" style={{ fontSize: "clamp(2.1rem, 3.5vw, 2.85rem)" }}>
+              Global wealth,<br />
+              stewarded with<br />
+              <em className="text-[#DFBD76]">precision</em> and care.
             </h1>
-            <p className="text-primary-foreground/60 text-sm leading-relaxed">
-              Private offshore wealth management for individuals and families with international financial interests. Personal relationships, with a global perspective.
+            <p className="text-[#F6F1E8]/75 text-sm leading-relaxed">
+              Cross-border private banking, segregated institutional custody, and multi-currency discretionary mandates built for international families and endowments.
             </p>
           </div>
         </div>
 
-        <div className="relative z-10 pt-10 border-t border-primary-foreground/10 grid grid-cols-2 gap-6">
+        <div className="relative z-10 pt-8 border-t border-[#C6A15B]/25 grid grid-cols-2 gap-6">
           {[
-            { v: "CAD $4.2B", l: "Assets managed" },
-            { v: "12.4%", l: "10 yr avg return" },
-            { v: "0.32%", l: "Avg all in fee" },
-            { v: "Personal", l: "Client relationships" },
+            { v: "$4.2B USD", l: "Assets under advisory" },
+            { v: "38+ Countries", l: "Global custody network" },
+            { v: "18 Currencies", l: "Multi-currency settlement" },
+            { v: "Zero Lock-Up", l: "Liquid institutional access" },
           ].map(s => (
             <div key={s.l}>
-              <p className="font-mono-nums text-xl font-medium text-accent">{s.v}</p>
-              <p className="label-caps text-primary-foreground/40 mt-0.5">{s.l}</p>
+              <p className="font-mono-nums text-xl font-medium text-[#DFBD76]">{s.v}</p>
+              <p className="label-caps text-[#F6F1E8]/60 mt-1">{s.l}</p>
             </div>
           ))}
         </div>
       </div>
 
       {/* Right panel */}
-      <div className="flex-1 flex flex-col justify-center px-6 sm:px-12 lg:px-16 xl:px-24 py-16 overflow-y-auto">
-        <div className="w-full max-w-md mx-auto">
+      <div className="flex-1 flex flex-col justify-between px-6 sm:px-12 lg:px-16 xl:px-24 py-8 sm:py-12 overflow-y-auto bg-[#F6F1E8]">
+        <div className="w-full max-w-md mx-auto flex items-center justify-between pb-6 border-b border-[#0D2418]/10">
+          <a
+            href="/"
+            onClick={(e) => {
+              e.preventDefault();
+              setLocation("/");
+            }}
+            className="inline-flex items-center gap-2 text-xs font-medium text-[#0D2418]/75 hover:text-[#0D2418] transition-colors"
+          >
+            <img src="/veritas-logo.png" alt="Veritas Wealth" className="w-6 h-6 object-contain lg:hidden" />
+            <ArrowLeft className="w-3.5 h-3.5 hidden lg:inline" />
+            <span>Veritas Home</span>
+          </a>
+          <a
+            href="/company"
+            onClick={(e) => {
+              e.preventDefault();
+              setLocation("/company");
+            }}
+            className="text-[11px] uppercase tracking-[0.16em] font-semibold text-[#113221] hover:text-[#8E6D2F] transition-colors"
+          >
+            The Firm
+          </a>
+        </div>
+
+        <div className="w-full max-w-md mx-auto my-auto py-10">
 
           {view === "login" ? (
             <div className="space-y-10">
               <div>
-                <p className="label-caps text-muted-foreground mb-4">Secure client portal</p>
-                <h2 className="font-serif text-display-md">{mfaRequired ? "One more step." : "Welcome back."}</h2>
+                <p className="label-caps text-[#8E6D2F] mb-3">Private Client Wealth Portal</p>
+                <h2 className="font-serif text-display-md text-[#0D2418]">{mfaRequired ? "One more step." : "Welcome back."}</h2>
               </div>
 
               {passwordChanged && !mfaRequired && (
@@ -602,6 +654,11 @@ export default function AuthPage() {
               <ApplicationForm onBack={() => setView("login")} />
             </div>
           )}
+        </div>
+
+        <div className="w-full max-w-md mx-auto pt-6 border-t border-[#0D2418]/10 text-[11px] text-[#0D2418]/55 flex items-center justify-between">
+          <span>Encrypted multi-jurisdictional custody</span>
+          <span className="font-mono-nums">256-bit TLS · FIDO/TOTP</span>
         </div>
       </div>
     </div>

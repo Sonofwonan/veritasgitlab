@@ -20,6 +20,7 @@ import { DebtRestrictionStatus } from "@/components/fees/debt-restriction-status
 import { accountLabel, transactionDate, maskAccountNumber, TOTAL_OWED_LABEL, type CashPosting } from "@shared/account-display";
 import { TransactionAmountBalance } from "@/components/transaction-amount-balance";
 import { InitialDepositBanner } from "@/components/initial-deposit-banner";
+import { useClientControls } from "@/hooks/use-client-controls";
 
 const QUICK_ACTIONS = [
   { label: 'Transfer', icon: ArrowLeftRight, href: '/transfers' },
@@ -48,6 +49,7 @@ function categoryOf(type: string) {
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const { features } = useClientControls();
   const currency = clientBalanceCurrency(user);
   const initialDepositRequired = user?.initialDepositStatus === "required";
   const initialDepositPending = user?.initialDepositStatus === "pending_review";
@@ -261,7 +263,11 @@ export default function DashboardPage() {
               {/* Action bar */}
               <div className="grid grid-cols-3 gap-2 w-full md:w-auto md:flex md:items-center shrink-0">
                 {QUICK_ACTIONS.map(({ label, icon: Icon, href }) => {
-                  const isDepositLocked = needsInitialDeposit && href !== "/accounts";
+                  const featureBlocked =
+                    (href === "/transfers" && !features.canTransferInternal && !features.canWireExternal && !features.canInstitutionalTransfer) ||
+                    (href === "/investments" && !features.canViewInvestments) ||
+                    (href === "/accounts" && !features.canViewAccounts);
+                  const isDepositLocked = (needsInitialDeposit && href !== "/accounts") || featureBlocked;
                   const ActionIcon = isDepositLocked ? Lock : Icon;
                   const isPrimary = label === "Transfer" && !isDepositLocked;
                   return (
@@ -270,7 +276,13 @@ export default function DashboardPage() {
                       type="button"
                       disabled={isDepositLocked}
                       aria-disabled={isDepositLocked || undefined}
-                      title={isDepositLocked ? "Complete initial deposit to unlock" : undefined}
+                      title={
+                        featureBlocked
+                          ? "This feature is currently disabled by your advisor"
+                          : isDepositLocked
+                            ? "Complete initial deposit to unlock"
+                            : undefined
+                      }
                       onClick={() => {
                         if (!isDepositLocked) setLocation(href);
                       }}

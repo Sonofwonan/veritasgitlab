@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { ClientFees } from "@/components/fees/client-fees";
 import { transactionDescription, clientBalanceCurrency, formatBalance, type BalanceCurrency } from "@shared/balance-currency";
 import { useAuth } from "@/hooks/use-auth";
+import { useClientControls } from "@/hooks/use-client-controls";
 import { useClientFeeSummary } from "@/hooks/use-fees";
 import { accountStatementCsv } from "@/lib/account-statement";
 import { accountLabel, maskAccountNumber, transactionDate, type CashPosting } from "@shared/account-display";
@@ -31,6 +32,7 @@ function exportStatement(account: { id: number; accountType: string; accountNumb
 
 export default function AccountDetailPage() {
   const { user } = useAuth();
+  const { features } = useClientControls();
   const currency = clientBalanceCurrency(user);
   const money = (value: string | number) => formatBalance(value,currency);
   const params = useParams();
@@ -185,10 +187,12 @@ export default function AccountDetailPage() {
               <h2 className="font-sans text-sm font-semibold text-slate-900 dark:text-foreground">Transaction history</h2>
               <CardDescription className="mt-0.5 text-xs">Recorded activity for this account</CardDescription>
             </div>
-            <Button data-testid="button-export-statement" aria-label="Export" title="Export statement" variant="outline" size="sm" className="h-9 w-9 shrink-0 rounded-md border-slate-200 dark:border-border p-0 sm:h-9 sm:w-auto sm:gap-2 sm:px-3" disabled={transactionsLoading || transactionsError} onClick={() => exportStatement(account, transactions || [], currency)}>
-              <Download className="h-3.5 w-3.5" aria-hidden="true" />
-              <span className="hidden sm:inline text-xs">Export CSV</span>
-            </Button>
+            {features.canExportStatements && (
+              <Button data-testid="button-export-statement" aria-label="Export" title="Export statement" variant="outline" size="sm" className="h-9 w-9 shrink-0 rounded-md border-slate-200 dark:border-border p-0 sm:h-9 sm:w-auto sm:gap-2 sm:px-3" disabled={transactionsLoading || transactionsError} onClick={() => exportStatement(account, transactions || [], currency)}>
+                <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                <span className="hidden sm:inline text-xs">Export CSV</span>
+              </Button>
+            )}
           </CardHeader>
           <CardContent className="p-0">
             <div className="max-h-[min(65vh,720px)] overflow-y-auto overscroll-contain divide-y divide-slate-100 dark:divide-border/50" aria-label="Scrollable account transaction history">

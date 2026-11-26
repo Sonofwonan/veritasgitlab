@@ -17,7 +17,7 @@ export default function AccountActivationPage() {
   const [tokenReady, setTokenReady] = useState(false);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [displayCurrency, setDisplayCurrency] = useState<BalanceCurrency>("CAD");
+  const [displayCurrency, setDisplayCurrency] = useState<BalanceCurrency>("USD");
   const [savedCurrency, setSavedCurrency] = useState<BalanceCurrency | null>(null);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);

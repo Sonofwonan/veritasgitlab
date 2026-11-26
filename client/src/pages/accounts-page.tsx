@@ -30,6 +30,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import { clientBalanceCurrency, formatBalance } from "@shared/balance-currency";
 import { InfoTip } from "@/components/ui/info-tip";
+import { useClientControls } from "@/hooks/use-client-controls";
 
 type AccountType = 'Brokerage Account' | 'Traditional IRA' | 'Roth IRA' |
   '401(k) / 403(b)' | '529 Savings Plan' | 'Trust Account';
@@ -117,6 +118,7 @@ export default function AccountsPage() {
   const { data: transactions } = useAccountTransactions(primaryAccount?.id || 0);
   const createAccountRequest = useCreateAccountRequest();
   const { user } = useAuth();
+  const { features } = useClientControls();
   const currency = clientBalanceCurrency(user);
   const money = (value: string | number) => formatBalance(value, currency);
   const feeSummary = useClientFeeSummary();
@@ -518,7 +520,8 @@ export default function AccountsPage() {
               <Button
                 type="button"
                 size="sm"
-                disabled={needsInitialDeposit}
+                disabled={needsInitialDeposit || !features.canOpenAccounts}
+                title={!features.canOpenAccounts ? "Account opening is currently disabled by your advisor" : undefined}
                 onClick={() => setIsOpen(true)}
                 className="min-h-9 bg-[#0B2218] hover:bg-[#133526] text-white rounded-md text-xs font-medium gap-1.5 whitespace-nowrap shrink-0"
                 data-testid="button-request-account"

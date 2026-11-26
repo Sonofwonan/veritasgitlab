@@ -12,6 +12,7 @@ import { pool } from "./db";
 import { securityHandler, securityOrigin } from "./security/routes";
 import { audit, consumeFactor, rateLimit, withSecurity } from "./security/store";
 import { comparePasswords, SecurityError } from "./security/crypto";
+import { getEffectiveClientControls } from "./admin-controls";
 
 export async function registerClientSettings(app: Express, authenticated: RequestHandler) {
   await pool.query(`CREATE TABLE IF NOT EXISTS client_contact_details (
@@ -36,11 +37,15 @@ export async function registerClientSettings(app: Express, authenticated: Reques
       residentialAddress: row.residential_address || null, mailingAddress: row.mailing_address || null });
   }));
   app.patch(contactDetailsPath, authenticated, securityOrigin, securityHandler(async (req, res) => {
+    const userId = (req.user as User).id;
+    const controls = await getEffectiveClientControls(pool, userId);
+    if (!controls.effective.canEditContactDetails) {
+      throw new SecurityError(403, "Contact details updates are locked by your administrator.");
+    }
     const input = contactDetailsSchema.extend({
       currentPassword: z.string().min(1, "Enter your current password.").max(128),
       code: z.string().trim().max(128).optional(),
     }).parse(req.body);
-    const userId = (req.user as User).id;
     await rateLimit(`contact-details:${userId}`);
     try {
       await withSecurity(userId, async (db, state, user) => {
@@ -77,8 +82,12 @@ export async function registerClientSettings(app: Express, authenticated: Reques
     }));
   }));
   app.patch(bankingPreferencesPath, authenticated, securityOrigin, securityHandler(async (req, res) => {
-    const input = bankingPreferencesSchema.parse(req.body);
     const userId = (req.user as User).id;
+    const controls = await getEffectiveClientControls(pool, userId);
+    if (!controls.effective.canEditPreferences) {
+      throw new SecurityError(403, "Banking preferences are locked by your administrator.");
+    }
+    const input = bankingPreferencesSchema.parse(req.body);
     await withSecurity(userId, async (db) => {
       await db.query(
         `INSERT INTO client_banking_preferences(user_id, statement_delivery, transaction_alerts, login_alerts, session_timeout_minutes)
