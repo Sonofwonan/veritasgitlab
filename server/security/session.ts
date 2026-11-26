@@ -1,5 +1,6 @@
 import type { Request } from "express";
 import type { User } from "@shared/schema";
+import { markSessionRevoked, upsertClientActiveSession } from "./store";
 
 declare module "express-session" {
   interface SessionData {
@@ -13,8 +14,10 @@ declare module "express-session" {
 export function saveSession(req: Request) {
   return new Promise<void>((resolve, reject) => req.session.save(error => error ? reject(error) : resolve()));
 }
-export function destroySession(req: Request) {
-  return new Promise<void>((resolve, reject) => req.session.destroy(error => error ? reject(error) : resolve()));
+export async function destroySession(req: Request) {
+  const sid = req.sessionID;
+  await new Promise<void>((resolve, reject) => req.session.destroy(error => error ? reject(error) : resolve()));
+  await markSessionRevoked(sid);
 }
 export function regenerateSession(req: Request) {
   return new Promise<void>((resolve, reject) => req.session.regenerate(error => error ? reject(error) : resolve()));
@@ -27,4 +30,5 @@ export async function finishLogin(req: Request, user: User, version: number, mfa
   req.session.mfaVerified = mfaVerified;
   req.session.lastActivity = Date.now();
   await saveSession(req);
+  await upsertClientActiveSession(req, user.id, mfaVerified);
 }

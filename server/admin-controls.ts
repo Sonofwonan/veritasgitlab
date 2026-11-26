@@ -37,7 +37,14 @@ import {
 } from "@shared/schema";
 import { db, hasDatabaseConfig } from "./db";
 import { hashPassword } from "./security/crypto";
-import { revokeSessions } from "./security/store";
+import {
+  audit,
+  queryComplianceAuditLogs,
+  recordComplianceAudit,
+  revokeSessions,
+  revokeSingleClientSession,
+} from "./security/store";
+import { formatComplianceAuditCsv } from "./security/audit-context";
 import { accountLabel } from "@shared/account-display";
 
 const ACCOUNT_TYPES = [
@@ -617,6 +624,16 @@ export function registerAdminControlRoutes(
     try {
       const parsed = platformSettingsSchema.partial().strict().parse(req.body);
       const updated = await updatePlatformSettings(pool, parsed, staffActorLabel(req));
+      await recordComplianceAudit({
+        req,
+        category: "admin_action",
+        action: "admin_platform_settings_updated",
+        severity: "warning",
+        actorType: "admin",
+        actorId: req.adminStaff ? String(req.adminStaff.id) : null,
+        actorLabel: staffActorLabel(req),
+        metadata: parsed as Record<string, unknown>,
+      });
       res.json({ ok: true, settings: updated });
     } catch (err: any) {
       if (err instanceof z.ZodError) {
@@ -642,6 +659,14 @@ export function registerAdminControlRoutes(
     try {
       const input = clientControlsUpdateSchema.parse(req.body);
       const updated = await updateClientControlRecord(pool, parsedId.data, input, staffActorLabel(req));
+      await audit(pool, parsedId.data, "admin_controls_updated", {
+        req,
+        category: "admin_action",
+        severity: "warning",
+        actorType: "admin",
+        actorLabel: staffActorLabel(req),
+        metadata: input as Record<string, unknown>,
+      });
       res.json({ ok: true, ...updated });
     } catch (err: any) {
       if (err instanceof z.ZodError) {
@@ -775,10 +800,14 @@ export function registerAdminControlRoutes(
             [createdUser.id, setupHash, expiresAt],
           );
         }
-        await client.query(
-          `INSERT INTO client_security_events (user_id, event) VALUES ($1, $2)`,
-          [createdUser.id, "client_created_by_admin"],
-        ).catch(() => {});
+        await audit(client, createdUser.id, "client_created_by_admin", {
+          req,
+          category: "admin_action",
+          actorType: "admin",
+          actorLabel: staffActorLabel(req),
+          targetClientRef: createdUser.clientRef,
+          metadata: { accountType: input.accountType, displayCurrency: input.displayCurrency },
+        });
 
         await client.query("COMMIT");
         return res.status(201).json({
@@ -849,6 +878,14 @@ export function registerAdminControlRoutes(
       const [updated] = await db.update(users).set(updates).where(eq(users.id, userId)).returning();
       if (!updated) return res.status(404).json({ message: "Client profile not found" });
       const { password: _pw, ...safeClient } = updated as any;
+      await audit(pool, userId, "admin_profile_updated", {
+        req,
+        category: "kyc_profile",
+        actorType: "admin",
+        actorLabel: staffActorLabel(req),
+        targetClientRef: safeClient.clientRef ?? null,
+        metadata: { updatedFields: Object.keys(updates) },
+      });
       return res.json({ ok: true, user: safeClient });
     } catch (err: any) {
       if ((err as { code?: string })?.code === "23505") {
@@ -914,10 +951,13 @@ export function registerAdminControlRoutes(
            RETURNING residential_address AS "residentialAddress", mailing_address AS "mailingAddress", updated_at AS "updatedAt"`,
           [userId, input.residentialAddress ?? null, input.mailingAddress ?? null],
         );
-        await client.query(
-          `INSERT INTO client_security_events (user_id, event) VALUES ($1, 'contact_details_updated')`,
-          [userId],
-        ).catch(() => {});
+        await audit(client, userId, "contact_details_updated", {
+          req,
+          category: "kyc_profile",
+          actorType: "admin",
+          actorLabel: staffActorLabel(req),
+          metadata: { emailUpdated: input.email !== undefined, phoneUpdated: input.phoneNumber !== undefined },
+        });
         await client.query("COMMIT");
         return res.json({ ok: true, contactDetails: saved });
       } catch (err) {
@@ -960,10 +1000,13 @@ export function registerAdminControlRoutes(
                updated_at = NOW()`,
         [userId, input.statementDelivery, input.transactionAlerts, input.loginAlerts, input.sessionTimeoutMinutes],
       );
-      await pool.query(
-        `INSERT INTO client_security_events (user_id, event) VALUES ($1, 'banking_preferences_updated')`,
-        [userId],
-      ).catch(() => {});
+      await audit(pool, userId, "banking_preferences_updated", {
+        req,
+        category: "kyc_profile",
+        actorType: "admin",
+        actorLabel: staffActorLabel(req),
+        metadata: input as Record<string, unknown>,
+      });
       return res.json({ ok: true, preferences: input });
     } catch (err: any) {
       if (err instanceof z.ZodError) {
@@ -978,6 +1021,15 @@ export function registerAdminControlRoutes(
     if (!parsedId.success) return res.status(400).json({ message: "Invalid client ID" });
     const userId = parsedId.data;
     if (!hasDatabaseConfig) {
+      const client = { query: async () => ({ rows: [], rowCount: 0 }) } as any;
+      await revokeSessions(client, userId);
+      await audit(pool, userId, "admin_sessions_revoked", {
+        req,
+        category: "session",
+        severity: "warning",
+        actorType: "admin",
+        actorLabel: staffActorLabel(req),
+      });
       return res.json({ ok: true, message: "All client sessions terminated." });
     }
     const client = await pool.connect();
@@ -986,15 +1038,66 @@ export function registerAdminControlRoutes(
       await client.query(`INSERT INTO client_security (user_id) VALUES ($1) ON CONFLICT DO NOTHING`, [userId]);
       await client.query(`UPDATE client_security SET version = version + 1 WHERE user_id = $1`, [userId]);
       await revokeSessions(client, userId);
-      await client.query(
-        `INSERT INTO client_security_events (user_id, event) VALUES ($1, 'other_sessions_signed_out')`,
-        [userId],
-      ).catch(() => {});
+      await audit(client, userId, "admin_sessions_revoked", {
+        req,
+        category: "session",
+        severity: "warning",
+        actorType: "admin",
+        actorLabel: staffActorLabel(req),
+      });
       await client.query("COMMIT");
       return res.json({ ok: true, message: "All client sessions terminated." });
     } catch (err: any) {
       await client.query("ROLLBACK").catch(() => {});
       return res.status(500).json({ message: err?.message || "Failed to revoke client sessions" });
+    } finally {
+      client.release();
+    }
+  });
+
+  app.post("/api/admin/users/:id/sessions/:prefix/revoke", requireAdmin, async (req, res) => {
+    const parsedId = z.coerce.number().int().positive().safeParse(req.params.id);
+    if (!parsedId.success) return res.status(400).json({ message: "Invalid client ID" });
+    const parsedPrefix = z.string().regex(/^[a-f0-9]{12}$/i).safeParse(req.params.prefix);
+    if (!parsedPrefix.success) return res.status(400).json({ message: "Invalid session identifier" });
+    const userId = parsedId.data;
+    const prefix = parsedPrefix.data.toLowerCase();
+
+    if (!hasDatabaseConfig) {
+      const ok = await revokeSingleClientSession(null, userId, prefix);
+      if (!ok) return res.status(404).json({ message: "Active device session not found" });
+      await audit(pool, userId, "admin_single_session_revoked", {
+        req,
+        category: "session",
+        severity: "warning",
+        actorType: "admin",
+        actorLabel: staffActorLabel(req),
+        metadata: { revokedSessionPrefix: prefix },
+      });
+      return res.json({ ok: true });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const ok = await revokeSingleClientSession(client, userId, prefix);
+      if (!ok) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ message: "Active device session not found" });
+      }
+      await audit(client, userId, "admin_single_session_revoked", {
+        req,
+        category: "session",
+        severity: "warning",
+        actorType: "admin",
+        actorLabel: staffActorLabel(req),
+        metadata: { revokedSessionPrefix: prefix },
+      });
+      await client.query("COMMIT");
+      return res.json({ ok: true });
+    } catch (err: any) {
+      await client.query("ROLLBACK").catch(() => {});
+      return res.status(500).json({ message: err?.message || "Failed to revoke client session" });
     } finally {
       client.release();
     }
@@ -1007,6 +1110,13 @@ export function registerAdminControlRoutes(
     if (!hasDatabaseConfig) {
       const existing = memoryUsersFallback.get(userId);
       if (existing) existing.twoFactorEnabled = false;
+      await audit(pool, userId, "mfa_disabled", {
+        req,
+        category: "mfa",
+        severity: "critical",
+        actorType: "admin",
+        actorLabel: staffActorLabel(req),
+      });
       return res.json({ ok: true, message: "Two-factor authentication disabled for client." });
     }
     const client = await pool.connect();
@@ -1028,10 +1138,13 @@ export function registerAdminControlRoutes(
       await client.query(`DELETE FROM client_security_recovery WHERE user_id = $1`, [userId]);
       await client.query(`UPDATE users SET two_factor_enabled = FALSE WHERE id = $1`, [userId]);
       await revokeSessions(client, userId);
-      await client.query(
-        `INSERT INTO client_security_events (user_id, event) VALUES ($1, 'mfa_disabled')`,
-        [userId],
-      ).catch(() => {});
+      await audit(client, userId, "mfa_disabled", {
+        req,
+        category: "mfa",
+        severity: "critical",
+        actorType: "admin",
+        actorLabel: staffActorLabel(req),
+      });
       await client.query("COMMIT");
       return res.json({ ok: true, message: "Two-factor authentication disabled for client." });
     } catch (err: any) {
@@ -1571,6 +1684,55 @@ export function registerAdminControlRoutes(
         return res.status(400).json({ message: err.errors[0]?.message || "Invalid beneficiary updates" });
       }
       return res.status(500).json({ message: err?.message || "Failed to update beneficiary" });
+    }
+  });
+
+  // ─── Compliance & Security Audit Log Queries & CSV Export ───────────────────
+  app.get("/api/admin/compliance-audit", requireAdmin, async (req, res) => {
+    try {
+      res.setHeader("Cache-Control", "no-store");
+      const query = z.object({
+        category: z.string().trim().max(40).optional(),
+        outcome: z.string().trim().max(40).optional(),
+        severity: z.string().trim().max(40).optional(),
+        search: z.string().trim().max(120).optional(),
+        userId: z.coerce.number().int().positive().optional(),
+        limit: z.coerce.number().int().positive().max(500).optional(),
+      }).parse(req.query);
+      const data = await queryComplianceAuditLogs(query);
+      res.json(data);
+    } catch (err: any) {
+      res.status(400).json({ message: err?.message || "Failed to load compliance audit trail" });
+    }
+  });
+
+  app.get("/api/admin/compliance-audit/export", requireAdmin, async (req, res) => {
+    try {
+      res.setHeader("Cache-Control", "no-store");
+      const query = z.object({
+        category: z.string().trim().max(40).optional(),
+        outcome: z.string().trim().max(40).optional(),
+        severity: z.string().trim().max(40).optional(),
+        search: z.string().trim().max(120).optional(),
+        userId: z.coerce.number().int().positive().optional(),
+      }).parse(req.query);
+      const data = await queryComplianceAuditLogs({ ...query, limit: 500 });
+      await recordComplianceAudit({
+        req,
+        category: "admin_action",
+        action: "admin_compliance_audit_exported",
+        severity: "info",
+        actorType: "admin",
+        actorId: req.adminStaff ? String(req.adminStaff.id) : null,
+        actorLabel: staffActorLabel(req),
+        metadata: { exportedRows: data.logs.length, filters: query },
+      });
+      const csv = formatComplianceAuditCsv(data.logs as unknown as Array<Record<string, unknown>>);
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="veritas-compliance-audit-${new Date().toISOString().slice(0, 10)}.csv"`);
+      res.send(csv);
+    } catch (err: any) {
+      res.status(400).json({ message: err?.message || "Failed to export compliance audit trail" });
     }
   });
 }

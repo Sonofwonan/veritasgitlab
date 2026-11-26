@@ -4,6 +4,7 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { hasDatabaseConfig } from "./db";
 import { comparePasswords, digest, hashPassword } from "./security/crypto";
+import { recordComplianceAudit } from "./security/store";
 
 export interface AdminStaffIdentity {
   id: number;
@@ -345,6 +346,15 @@ export async function setupAdminAuth(app: Express, pool: Pool) {
         }
         const staff = await createStaffRecord(pool, { ...parsed, createdByStaffId: null });
         const token = await issueSessionToken(pool, staff.id);
+        await recordComplianceAudit({
+          req,
+          category: "admin_action",
+          action: "admin_bootstrap_created",
+          severity: "warning",
+          actorType: "admin",
+          actorId: String(staff.id),
+          actorLabel: `${staff.displayName} (@${staff.username})`,
+        });
         return void res.status(201).json({ ok: true, token, staff });
       }
 
@@ -367,6 +377,15 @@ export async function setupAdminAuth(app: Express, pool: Pool) {
         await client.query("COMMIT");
         const staff: AdminStaffIdentity = rows[0];
         const token = await issueSessionToken(pool, staff.id);
+        await recordComplianceAudit({
+          req,
+          category: "admin_action",
+          action: "admin_bootstrap_created",
+          severity: "warning",
+          actorType: "admin",
+          actorId: String(staff.id),
+          actorLabel: `${staff.displayName} (@${staff.username})`,
+        });
         return void res.status(201).json({ ok: true, token, staff });
       } catch (err) {
         await client.query("ROLLBACK");
@@ -392,15 +411,48 @@ export async function setupAdminAuth(app: Express, pool: Pool) {
       }
 
       if (typeof username === "string" && username.trim().length > 0) {
+        const normUser = normalizeUsername(username);
         const staff = await findStaffByUsername(pool, username);
         if (!staff || !staff.active) {
+          await recordComplianceAudit({
+            req,
+            category: "auth",
+            action: "admin_login_failed",
+            outcome: "failed",
+            severity: "critical",
+            actorType: "admin",
+            actorLabel: `@${normUser}`,
+            metadata: { mode: "staff", reason: !staff ? "unknown_staff" : "deactivated_staff" },
+          });
           return void res.status(401).json({ message: "Invalid staff credentials" });
         }
         const valid = await comparePasswords(password, staff.passwordHash);
         if (!valid) {
+          await recordComplianceAudit({
+            req,
+            category: "auth",
+            action: "admin_login_failed",
+            outcome: "failed",
+            severity: "critical",
+            actorType: "admin",
+            actorId: String(staff.id),
+            actorLabel: `${staff.displayName} (@${staff.username})`,
+            metadata: { mode: "staff", reason: "invalid_password" },
+          });
           return void res.status(401).json({ message: "Invalid staff credentials" });
         }
         const token = await issueSessionToken(pool, staff.id);
+        await recordComplianceAudit({
+          req,
+          category: "auth",
+          action: "admin_sign_in",
+          outcome: "success",
+          severity: "info",
+          actorType: "admin",
+          actorId: String(staff.id),
+          actorLabel: `${staff.displayName} (@${staff.username})`,
+          metadata: { mode: "staff" },
+        });
         return void res.json({
           ok: true,
           token,
@@ -421,9 +473,29 @@ export async function setupAdminAuth(app: Express, pool: Pool) {
       }
 
       if (!constantTimeMatch(password, configuredPassword)) {
+        await recordComplianceAudit({
+          req,
+          category: "auth",
+          action: "admin_login_failed",
+          outcome: "failed",
+          severity: "critical",
+          actorType: "admin",
+          actorLabel: "Admin Key",
+          metadata: { mode: "legacy_key", reason: "invalid_key" },
+        });
         return void res.status(401).json({ message: "Invalid password" });
       }
 
+      await recordComplianceAudit({
+        req,
+        category: "auth",
+        action: "admin_sign_in",
+        outcome: "success",
+        severity: "warning",
+        actorType: "admin",
+        actorLabel: "Admin Key",
+        metadata: { mode: "legacy_key" },
+      });
       return void res.json({ ok: true, staff: null, legacyKeyMode: true });
     } catch (error) {
       console.error("[admin-auth] Login error:", error);
@@ -443,6 +515,14 @@ export async function setupAdminAuth(app: Express, pool: Pool) {
     if (req.adminTokenDigest) {
       await revokeSessionToken(pool, req.adminTokenDigest);
     }
+    await recordComplianceAudit({
+      req,
+      category: "auth",
+      action: "admin_sign_out",
+      actorType: "admin",
+      actorId: req.adminStaff ? String(req.adminStaff.id) : null,
+      actorLabel: req.adminStaff ? `${req.adminStaff.displayName} (@${req.adminStaff.username})` : "Admin Key",
+    });
     res.json({ ok: true });
   });
 
@@ -482,6 +562,16 @@ export async function setupAdminAuth(app: Express, pool: Pool) {
         password: parsed.password,
         createdByStaffId: req.adminStaff?.id ?? null,
       });
+      await recordComplianceAudit({
+        req,
+        category: "admin_action",
+        action: "admin_staff_created",
+        severity: "warning",
+        actorType: "admin",
+        actorId: req.adminStaff ? String(req.adminStaff.id) : null,
+        actorLabel: req.adminStaff ? `${req.adminStaff.displayName} (@${req.adminStaff.username})` : "Admin Key",
+        metadata: { createdStaffId: created.id, createdUsername: created.username },
+      });
       res.status(201).json(created);
     } catch (error: any) {
       if (error instanceof z.ZodError) {
@@ -519,6 +609,16 @@ export async function setupAdminAuth(app: Express, pool: Pool) {
       if (!active) {
         await pool.query(`DELETE FROM admin_sessions WHERE staff_id = $1`, [id]);
       }
+      await recordComplianceAudit({
+        req,
+        category: "admin_action",
+        action: active ? "admin_staff_reactivated" : "admin_staff_deactivated",
+        severity: "warning",
+        actorType: "admin",
+        actorId: req.adminStaff ? String(req.adminStaff.id) : null,
+        actorLabel: req.adminStaff ? `${req.adminStaff.displayName} (@${req.adminStaff.username})` : "Admin Key",
+        metadata: { targetStaffId: id, targetUsername: rows[0].username, active },
+      });
       res.json(rows[0]);
     } catch (error: any) {
       if (error instanceof z.ZodError) {

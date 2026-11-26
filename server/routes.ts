@@ -20,7 +20,16 @@ import { MARKET_UNAVAILABLE } from "@shared/market";
 import { LIQUIDATION_STATUS_UNAVAILABLE } from "@shared/liquidation";
 import { ownedCashHistory } from "./account-history";
 import { registerHistoricalBalanceRoutes } from "./historical-balances-routes";
-import { audit, initializeSecurity, rateLimit, revokeSessions, safeUser, withSecurity } from "./security/store";
+import {
+  audit,
+  initializeSecurity,
+  listClientActiveSessions,
+  rateLimit,
+  recordComplianceAudit,
+  revokeSessions,
+  safeUser,
+  withSecurity,
+} from "./security/store";
 import { digest, encryptionConfigured, SecurityError } from "./security/crypto";
 import { registerSecurityRoutes, securityHandler, securityOrigin } from "./security/routes";
 import { registerRecoveryRequests } from "./security/recovery-requests";
@@ -264,16 +273,55 @@ export async function registerRoutes(
     const credentials = api.auth.login.input.parse(req.body);
     await rateLimit(`password-login-ip:${req.ip}`, 300);
     await rateLimit(`password-login-user:${credentials.userId.trim().toLowerCase()}`, 10);
-    const user = await new Promise<User>((resolve, reject) => {
-      passport.authenticate("local", (error: unknown, found: User | false, info: { message?: string }) => {
-        if (error) return reject(error);
-        if (!found) return reject(new SecurityError(401, info?.message || "Invalid credentials"));
-        resolve(found);
-      })(req, res, (error: unknown) => reject(error || new Error("Authentication failed")));
-    });
+    let user: User;
+    try {
+      user = await new Promise<User>((resolve, reject) => {
+        passport.authenticate("local", (error: unknown, found: User | false, info: { message?: string }) => {
+          if (error) return reject(error);
+          if (!found) return reject(new SecurityError(401, info?.message || "Invalid credentials"));
+          resolve(found);
+        })(req, res, (error: unknown) => reject(error || new Error("Authentication failed")));
+      });
+    } catch (err) {
+      const attemptedRef = credentials.userId.trim().slice(0, 64);
+      const matched = await storage.getUserByClientRef(attemptedRef).catch(() => undefined);
+      const reason = err instanceof SecurityError ? err.message : "Invalid credentials";
+      if (matched) {
+        await audit(pool, matched.id, "login_failed", {
+          req,
+          category: "auth",
+          outcome: reason === "ACCOUNT_FROZEN" ? "denied" : "failed",
+          severity: "warning",
+          actorType: "client",
+          actorLabel: matched.clientRef || matched.name,
+          targetClientRef: matched.clientRef ?? null,
+          metadata: { reason: reason === "ACCOUNT_FROZEN" ? "account_frozen" : "authentication_failed" },
+        });
+      } else {
+        await recordComplianceAudit({
+          req,
+          category: "auth",
+          action: "login_failed",
+          outcome: "failed",
+          severity: "warning",
+          actorType: "client",
+          actorLabel: attemptedRef || "Unknown",
+          targetClientRef: attemptedRef || null,
+          metadata: { reason: "unknown_client_ref" },
+        });
+      }
+      throw err;
+    }
     const state = await withSecurity(user.id, async (client, security, current) => {
       if (user.password !== current.password) throw new SecurityError(401, "Please sign in again.");
-      await audit(client, user.id, security.mfa_enabled ? "password_verified_for_mfa" : "password_sign_in");
+      await audit(client, user.id, security.mfa_enabled ? "password_verified_for_mfa" : "password_sign_in", {
+        req,
+        category: "auth",
+        actorType: "client",
+        actorLabel: user.clientRef || user.name,
+        targetClientRef: user.clientRef ?? null,
+        metadata: { mfaRequired: Boolean(security.mfa_enabled) },
+      });
       return security;
     });
     if (state.mfa_enabled) {
@@ -290,6 +338,16 @@ export async function registerRoutes(
   }));
 
   app.post(api.auth.logout.path, securityHandler(async (req, res) => {
+    const user = req.isAuthenticated() ? (req.user as User) : null;
+    if (user) {
+      await audit(pool, user.id, "client_logout", {
+        req,
+        category: "auth",
+        actorType: "client",
+        actorLabel: user.clientRef || user.name,
+        targetClientRef: user.clientRef ?? null,
+      });
+    }
     await destroySession(req);
     res.clearCookie("connect.sid", { path: "/" });
     res.status(200).send();
@@ -324,7 +382,16 @@ export async function registerRoutes(
         securityAlerts: z.boolean().optional(),
         theme: z.enum(["light", "dark", "system"]).optional(),
       }).strict().parse(req.body);
-      const user = await storage.updateUser((req.user as User).id, profile);
+      const actor = req.user as User;
+      const user = await storage.updateUser(actor.id, profile);
+      await audit(pool, actor.id, "portal_preferences_updated", {
+        req,
+        category: "kyc_profile",
+        actorType: "client",
+        actorLabel: actor.clientRef || actor.name,
+        targetClientRef: actor.clientRef ?? null,
+        metadata: profile,
+      });
       res.json(await safeUser(user));
     } catch (err: any) {
       res.status(400).json({ message: err.message || "Failed to update profile" });
@@ -568,6 +635,15 @@ export async function registerRoutes(
           evidenceRef: senderReference?.trim() || null,
           reason: `Client initiated deposit (${methodLabel}) to ${accountLabel(toAccount)}`,
         });
+        await audit(pool, (req.user as User).id, "initial_deposit_submitted", {
+          req,
+          category: "money_movement",
+          outcome: "pending_review",
+          actorType: "client",
+          actorLabel: (req.user as User).clientRef || (req.user as User).name,
+          targetClientRef: (req.user as User).clientRef ?? null,
+          metadata: { amount: cleanAmount, method: methodLabel, toAccountId },
+        });
         return res.status(201).json(transaction);
       }
 
@@ -620,6 +696,15 @@ export async function registerRoutes(
         actorName: (req.user as User).name,
         reason: isInternalTransfer ? "Client internal account transfer" : "Client transfer request",
       });
+      await audit(pool, (req.user as User).id, "internal_transfer_executed", {
+        req,
+        category: "money_movement",
+        outcome: isInternalTransfer ? "success" : "pending_review",
+        actorType: "client",
+        actorLabel: (req.user as User).clientRef || (req.user as User).name,
+        targetClientRef: (req.user as User).clientRef ?? null,
+        metadata: { amount, fromAccountId, toAccountId, internal: Boolean(isInternalTransfer) },
+      });
 
       res.status(201).json({ 
         ...transaction,
@@ -668,6 +753,14 @@ export async function registerRoutes(
         return res.set("Cache-Control", "no-store").status(503).json(MARKET_UNAVAILABLE);
       }
       const investment = await storage.buyAsset(accountId, symbol.trim().toUpperCase(), amount, quote.price);
+      await audit(pool, userId, "investment_order_executed", {
+        req,
+        category: "money_movement",
+        actorType: "client",
+        actorLabel: (req.user as User).clientRef || (req.user as User).name,
+        targetClientRef: (req.user as User).clientRef ?? null,
+        metadata: { side: "buy", symbol: symbol.trim().toUpperCase(), amount, price: quote.price, accountId },
+      });
       res.status(201).json(investment);
     } catch (err: any) {
       res.status(400).json({ message: err.message || "Buy failed" });
@@ -700,6 +793,14 @@ export async function registerRoutes(
         return res.set("Cache-Control", "no-store").status(503).json(MARKET_UNAVAILABLE);
       }
       const investment = await storage.sellAsset(accountId, normalizedSymbol, shares, price);
+      await audit(pool, userId, "investment_order_executed", {
+        req,
+        category: "money_movement",
+        actorType: "client",
+        actorLabel: (req.user as User).clientRef || (req.user as User).name,
+        targetClientRef: (req.user as User).clientRef ?? null,
+        metadata: { side: "sell", symbol: normalizedSymbol, shares, price, accountId },
+      });
       res.json(investment);
     } catch (err: any) {
       res.status(400).json({ message: err.message || "Sell failed" });
@@ -736,6 +837,14 @@ export async function registerRoutes(
         .set({ status: 'approved', adminNotes: req.body.notes || null })
         .where(eq(payees.id, parseInt(req.params.id)))
         .returning();
+      if (updated?.userId) {
+        await audit(pool, updated.userId, "admin_payee_approved", {
+          req,
+          category: "admin_action",
+          actorType: "admin",
+          metadata: { payeeId: updated.id, payeeName: updated.name, country: updated.country },
+        });
+      }
       res.json({ ok: true, payee: updated });
     } catch (err: any) { res.status(500).json({ message: err.message }); }
   });
@@ -747,6 +856,15 @@ export async function registerRoutes(
         .set({ status: 'rejected', adminNotes: req.body.notes || null })
         .where(eq(payees.id, parseInt(req.params.id)))
         .returning();
+      if (updated?.userId) {
+        await audit(pool, updated.userId, "admin_payee_rejected", {
+          req,
+          category: "admin_action",
+          severity: "warning",
+          actorType: "admin",
+          metadata: { payeeId: updated.id, payeeName: updated.name },
+        });
+      }
       res.json({ ok: true, payee: updated });
     } catch (err: any) { res.status(500).json({ message: err.message }); }
   });
@@ -832,6 +950,16 @@ export async function registerRoutes(
       } else {
         [updated] = await db.select().from(transactions).where(eq(transactions.id, id));
       }
+      await recordComplianceAudit({
+        req,
+        category: "money_movement",
+        action: `admin_wire_${status || "updated"}`,
+        severity: "warning",
+        actorType: "admin",
+        actorId: req.adminStaff ? String(req.adminStaff.id) : null,
+        actorLabel: req.adminStaff ? `${req.adminStaff.displayName} (@${req.adminStaff.username})` : "Admin Key",
+        metadata: { transactionId: id, status: updated?.status, amount: updated?.amount },
+      });
       res.json({ ok: true, transaction: updated });
     } catch (err: any) {
       res.status(err instanceof FundsAccessError ? err.status : 500).json({ message: err.message });
@@ -862,6 +990,14 @@ export async function registerRoutes(
         userId: (req.user as User).id,
         status: "pending_approval",
       } as any);
+      await audit(pool, (req.user as User).id, "beneficiary_added", {
+        req,
+        category: "money_movement",
+        actorType: "client",
+        actorLabel: (req.user as User).clientRef || (req.user as User).name,
+        targetClientRef: (req.user as User).clientRef ?? null,
+        metadata: { payeeId: payee.id, country: payeeInput.country, currency: payeeInput.currency ?? fallbackCurrency },
+      });
       res.status(201).json(payee);
     } catch (err) {
       console.error('Payee creation error:', err);
@@ -878,6 +1014,14 @@ export async function registerRoutes(
     try {
       const id = Number(req.params.id);
       await storage.deletePayee(id, (req.user as User).id);
+      await audit(pool, (req.user as User).id, "beneficiary_deleted", {
+        req,
+        category: "money_movement",
+        actorType: "client",
+        actorLabel: (req.user as User).clientRef || (req.user as User).name,
+        targetClientRef: (req.user as User).clientRef ?? null,
+        metadata: { payeeId: id },
+      });
       res.status(204).send();
     } catch (err) {
       res.status(500).json({ message: "Failed to delete payee" });
@@ -966,6 +1110,15 @@ export async function registerRoutes(
         actorName: (req.user as User).name,
         evidenceRef: reference || null,
         reason: `Client submitted ${wireType} wire transfer request`,
+      });
+      await audit(pool, currentUserId, "wire_transfer_submitted", {
+        req,
+        category: "money_movement",
+        outcome: "pending_review",
+        actorType: "client",
+        actorLabel: (req.user as User).clientRef || (req.user as User).name,
+        targetClientRef: (req.user as User).clientRef ?? null,
+        metadata: { transactionId: transaction?.id, wireType, amount, payeeId, targetCurrency: targetCurrency ?? null },
       });
 
       res.status(201).json(transaction);
@@ -1122,7 +1275,13 @@ export async function registerRoutes(
       await client.query("INSERT INTO client_security(user_id) VALUES($1) ON CONFLICT DO NOTHING", [userId]);
       await client.query("UPDATE client_security SET version=version+1,pending_secret=NULL,pending_expires=NULL,pending_session=NULL WHERE user_id=$1", [userId]);
       if (purpose === "admin_reset") {
-        await client.query("INSERT INTO client_security_events(user_id, event) VALUES($1, $2)", [userId, "password_reset_by_admin_link"]);
+        await audit(client, userId, "password_reset_by_admin_link", {
+          req,
+          category: "auth",
+          severity: "warning",
+          actorType: "client",
+          targetClientRef: updateResult.rows[0].client_ref ?? null,
+        });
       }
       await revokeSessions(client, userId);
       await client.query("COMMIT");
@@ -1533,7 +1692,14 @@ export async function registerRoutes(
       if (!hasDatabaseConfig) {
         const memDetails = getMemoryUserDetails(userId);
         if (!memDetails) return res.status(404).json({ message: "Client profile not found" });
-        return res.json(memDetails);
+        const sessions = await listClientActiveSessions(userId);
+        return res.json({
+          ...memDetails,
+          security: {
+            ...memDetails.security,
+            sessions,
+          },
+        });
       }
       const [userRow] = await db.select().from(users).where(eq(users.id, userId));
       if (!userRow) return res.status(404).json({ message: "Client profile not found" });
@@ -1588,8 +1754,22 @@ export async function registerRoutes(
           [userId],
         ),
         safeQuery(
-          `SELECT id, event, created_at AS "createdAt"
-           FROM client_security_events WHERE user_id = $1 ORDER BY id DESC LIMIT 25`,
+          `SELECT id,
+                  event,
+                  category,
+                  outcome,
+                  actor_type AS "actorType",
+                  actor_label AS "actorLabel",
+                  ip_address AS "ipAddress",
+                  location,
+                  device_summary AS "deviceSummary",
+                  browser,
+                  os,
+                  device_type AS "deviceType",
+                  session_prefix AS "sessionPrefix",
+                  metadata,
+                  created_at AS "createdAt"
+           FROM client_security_events WHERE user_id = $1 ORDER BY id DESC LIMIT 40`,
           [userId],
         ),
         safeQuery(
@@ -1695,10 +1875,11 @@ export async function registerRoutes(
       ]);
 
       const totalBalance = userAccounts.reduce((sum, acc) => sum + Number(acc.balance || 0), 0);
-      const [bankingPreferences, clientControls, userCards] = await Promise.all([
+      const [bankingPreferences, clientControls, userCards, activeSessions] = await Promise.all([
         getClientBankingPreferences(pool, userId),
         getClientControlRecord(pool, userId),
         getCardsForUser(pool, userId),
+        listClientActiveSessions(userId),
       ]);
 
       res.json({
@@ -1715,6 +1896,7 @@ export async function registerRoutes(
           mfaEnabled: Boolean(securityRows[0]?.mfaEnabled),
           version: Number(securityRows[0]?.version ?? 0),
           events: securityEvents,
+          sessions: activeSessions,
           recoveryRequests,
           setupTokens,
         },
@@ -1776,10 +1958,13 @@ export async function registerRoutes(
         [userId, tokenHash, expiresAt],
       );
 
-      await client.query(
-        `INSERT INTO client_security_events (user_id, event) VALUES ($1, $2)`,
-        [userId, "password_reset_link_issued"],
-      );
+      await audit(client, userId, "password_reset_link_issued", {
+        req,
+        category: "auth",
+        severity: "warning",
+        actorType: "admin",
+        targetClientRef: userRow.clientRef ?? null,
+      });
 
       await client.query("COMMIT");
       return res.json({
@@ -1802,10 +1987,19 @@ export async function registerRoutes(
   // Restrict / unrestrict a user login
   app.post("/api/admin/users/:id/restrict", requireAdmin, async (req, res) => {
     try {
+      const targetUserId = parseInt(req.params.id);
       const { restricted, message } = req.body as { restricted: boolean; message?: string };
-      const updated = await storage.updateUser(parseInt(req.params.id), {
+      const updated = await storage.updateUser(targetUserId, {
         loginRestricted: restricted,
         loginRestrictionMessage: restricted ? (message || null) : null,
+      });
+      await audit(pool, targetUserId, restricted ? "login_restricted" : "login_unrestricted", {
+        req,
+        category: "admin_action",
+        severity: "warning",
+        actorType: "admin",
+        targetClientRef: updated.clientRef ?? null,
+        metadata: { restricted, reason: message || null },
       });
       res.json({ success: true, loginRestricted: updated.loginRestricted });
     } catch (err: any) {
@@ -1816,16 +2010,30 @@ export async function registerRoutes(
   // Freeze / unfreeze an account (compliance / fraud)
   app.post("/api/admin/users/:id/freeze", requireAdmin, async (req, res) => {
     try {
+      const targetUserId = parseInt(req.params.id);
       const { frozen, reason } = req.body as { frozen: boolean; reason?: string };
-      const updated = await storage.updateUser(parseInt(req.params.id), {
+      const updated = await storage.updateUser(targetUserId, {
         accountFrozen: frozen,
         freezeReason: frozen ? (reason || null) : null,
         frozenAt: frozen ? new Date() : null,
       } as any);
       // Destroy all active sessions for this user so they are immediately logged out
       if (frozen) {
-        await pool.query(`DELETE FROM session WHERE sess::jsonb->'passport'->>'user' = $1`, [String(req.params.id)]);
+        const client = await pool.connect();
+        try {
+          await revokeSessions(client, targetUserId);
+        } finally {
+          client.release();
+        }
       }
+      await audit(pool, targetUserId, frozen ? "account_frozen" : "account_unfrozen", {
+        req,
+        category: "admin_action",
+        severity: frozen ? "critical" : "warning",
+        actorType: "admin",
+        targetClientRef: updated.clientRef ?? null,
+        metadata: { frozen, reason: reason || null },
+      });
       res.json({ success: true, accountFrozen: (updated as any).accountFrozen });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -1844,16 +2052,19 @@ export async function registerRoutes(
         `UPDATE users
          SET initial_deposit_status = 'completed'
          WHERE id = $1
-         RETURNING id, initial_deposit_status AS "initialDepositStatus"`,
+         RETURNING id, client_ref AS "clientRef", initial_deposit_status AS "initialDepositStatus"`,
         [userId],
       );
       if (!updated) {
         return res.status(404).json({ message: "Client profile not found" });
       }
-      await pool.query(
-        `INSERT INTO client_security_events (user_id, event) VALUES ($1, $2)`,
-        [userId, "initial_deposit_activated_by_admin"],
-      ).catch(() => {});
+      await audit(pool, userId, "admin_account_activated", {
+        req,
+        category: "admin_action",
+        severity: "warning",
+        actorType: "admin",
+        targetClientRef: updated.clientRef ?? null,
+      });
       return res.json({ ok: true, initialDepositStatus: updated.initialDepositStatus });
     } catch (err: any) {
       return res.status(500).json({ message: err?.message || "Failed to activate client account" });

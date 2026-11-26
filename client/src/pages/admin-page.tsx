@@ -58,6 +58,7 @@ import { ClientCurrencyPanel } from "@/components/admin/client-currency-panel";
 import { DebtRestrictionPanel } from "@/components/admin/debt-restriction-panel";
 import { HistoricalBalances } from "@/components/admin/historical-balances";
 import { AdminRecoveryRequests } from "@/components/admin/recovery-requests";
+import { ComplianceAuditPanel } from "@/components/admin/compliance-audit-panel";
 import { AdminTransactions, type AdminStaff } from "@/components/admin/admin-transactions";
 import { ClientDetailView, type ResetLinkResult } from "@/components/admin/client-detail-view";
 import { PlatformControlsPanel } from "@/components/admin/platform-controls";
@@ -1120,7 +1121,7 @@ function AdminDashboard({
       items: [
         { id: "fees", label: "Service & Mgmt Fees", icon: DollarSign },
         { id: "historical-balances", label: "Historical Balances", icon: History },
-        { id: "security", label: "Recovery Requests", icon: LifeBuoy },
+        { id: "security", label: "Security & Audit", icon: LifeBuoy },
       ],
     },
     {
@@ -1142,7 +1143,7 @@ function AdminDashboard({
     "holdings-cards": "Holdings & Cards Control",
     fees: "Service & Management Fees",
     "historical-balances": "Historical Balances",
-    security: "2FA Recovery Requests",
+    security: "Security, Compliance Audit & 2FA Recovery",
     platform: "Platform & Client UI Controls",
   };
 
@@ -3164,8 +3165,13 @@ function AdminDashboard({
             />
           )}
 
-          {/* ── VIEW 9: RECOVERY REQUESTS ── */}
-          {activeSection === "security" && <AdminRecoveryRequests adminKey={adminKey} />}
+          {/* ── VIEW 9: SECURITY, COMPLIANCE AUDIT & RECOVERY REQUESTS ── */}
+          {activeSection === "security" && (
+            <div className="space-y-6">
+              <ComplianceAuditPanel adminKey={adminKey} />
+              <AdminRecoveryRequests adminKey={adminKey} />
+            </div>
+          )}
 
           {/* ── VIEW 10: PLATFORM & CLIENT UI CONTROLS ── */}
           {activeSection === "platform" && (

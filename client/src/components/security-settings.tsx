@@ -4,17 +4,23 @@ import { useLocation } from "wouter";
 import {
   AlertCircle,
   CheckCircle2,
+  Globe,
   History,
   KeyRound,
+  Laptop,
   Loader2,
   LogOut,
+  MapPin,
   MonitorSmartphone,
   RefreshCw,
   ShieldCheck,
+  Smartphone,
+  Tablet,
 } from "lucide-react";
 import { recoveryRequestPath, type RecoveryRequest } from "@shared/client-settings";
 import {
   securityPaths,
+  type ClientSessionItem,
   type RecoveryResult,
   type SecurityActivityItem,
   type SecurityStatus,
@@ -121,6 +127,12 @@ export function SecuritySettings() {
     staleTime: 15000,
   });
 
+  const sessionsQuery = useQuery<ClientSessionItem[]>({
+    queryKey: [securityPaths.sessions],
+    queryFn: async () => (await apiRequest("GET", securityPaths.sessions)).json(),
+    staleTime: 15000,
+  });
+
   const passwordMutation = useMutation({
     gcTime: 0,
     mutationFn: async (payload: PasswordFields) => {
@@ -201,12 +213,32 @@ export function SecuritySettings() {
     mutationFn: async () => (await apiRequest("POST", securityPaths.revokeOtherSessions, {})).json(),
     onSuccess: async () => {
       setSessionsFeedback({ type: "success", message: "All other browser sessions have been signed out." });
-      await queryClient.invalidateQueries({ queryKey: [securityPaths.activity] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: [securityPaths.sessions] }),
+        queryClient.invalidateQueries({ queryKey: [securityPaths.activity] }),
+      ]);
     },
     onError: (e) =>
       setSessionsFeedback({
         type: "error",
         message: messageFrom(e, "Could not sign out of other sessions. Please try again."),
+      }),
+  });
+
+  const revokeSingleSessionMutation = useMutation({
+    mutationFn: async (prefix: string) =>
+      (await apiRequest("POST", securityPaths.revokeSession(prefix), {})).json(),
+    onSuccess: async () => {
+      setSessionsFeedback({ type: "success", message: "Selected session has been signed out." });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: [securityPaths.sessions] }),
+        queryClient.invalidateQueries({ queryKey: [securityPaths.activity] }),
+      ]);
+    },
+    onError: (e) =>
+      setSessionsFeedback({
+        type: "error",
+        message: messageFrom(e, "Could not sign out that device. Please try again."),
       }),
   });
 
@@ -442,20 +474,118 @@ export function SecuritySettings() {
 
       {/* ── Active Sessions Card ────────────────────────────────────────── */}
       <section className="rounded-lg border border-slate-200/90 dark:border-border bg-white dark:bg-card shadow-xs overflow-hidden">
-        <div className="flex items-start gap-3 border-b border-slate-100 dark:border-border px-5 py-4 sm:px-6">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-slate-100 dark:bg-muted text-slate-700 dark:text-foreground">
-            <MonitorSmartphone className="h-4 w-4" aria-hidden="true" />
+        <div className="flex flex-col gap-3 border-b border-slate-100 dark:border-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <div className="flex items-start gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-slate-100 dark:bg-muted text-slate-700 dark:text-foreground">
+              <MonitorSmartphone className="h-4 w-4" aria-hidden="true" />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold text-slate-900 dark:text-foreground">Active Devices &amp; Sessions</h2>
+              <p className="mt-0.5 text-xs text-slate-500 dark:text-muted-foreground">
+                Review signed-in browsers, IP locations, and revoke unrecognized devices.
+              </p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-sm font-semibold text-slate-900 dark:text-foreground">Active Sessions</h2>
-            <p className="mt-0.5 text-xs text-slate-500 dark:text-muted-foreground">
-              Manage signed-in browsers and revoke access on unrecognized devices.
-            </p>
-          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="w-full shrink-0 gap-2 rounded-md sm:w-auto"
+            data-testid="security-revoke-other-sessions"
+            disabled={revokeSessionsMutation.isPending}
+            onClick={() => {
+              setSessionsFeedback(null);
+              revokeSessionsMutation.mutate();
+            }}
+          >
+            {revokeSessionsMutation.isPending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <LogOut className="h-3.5 w-3.5" />
+            )}
+            Sign out other sessions
+          </Button>
         </div>
-        <div className="px-5 py-5 sm:px-6">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0">
+
+        <div className="divide-y divide-slate-100 dark:divide-border/60">
+          {sessionsQuery.isLoading ? (
+            <div className="space-y-3 p-5 sm:px-6">
+              <div className="h-4 w-52 animate-pulse rounded-md bg-muted" />
+              <div className="h-3 w-40 animate-pulse rounded-md bg-muted" />
+            </div>
+          ) : sessionsQuery.data && sessionsQuery.data.length > 0 ? (
+            sessionsQuery.data.map((session) => {
+              const dt = (session.deviceType || "").toLowerCase();
+              const DeviceIcon =
+                dt === "mobile"
+                  ? Smartphone
+                  : dt === "tablet"
+                    ? Tablet
+                    : Laptop;
+              return (
+                <div
+                  key={session.sessionPrefix}
+                  data-testid={`active-session-${session.sessionPrefix}`}
+                  className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6"
+                >
+                  <div className="flex items-start gap-3 min-w-0">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-slate-100 dark:bg-muted text-slate-600 dark:text-slate-300 mt-0.5">
+                      <DeviceIcon className="h-4 w-4" aria-hidden="true" />
+                    </div>
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-medium text-slate-900 dark:text-foreground">
+                          {session.deviceSummary || `${session.browser} on ${session.os}`}
+                        </p>
+                        {session.current && (
+                          <span className="inline-flex items-center gap-1 rounded-md border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 dark:bg-emerald-400" />
+                            Current device
+                          </span>
+                        )}
+                        {session.mfaVerified && (
+                          <span className="inline-flex items-center rounded-md border border-slate-200 dark:border-border bg-slate-50 dark:bg-muted px-1.5 py-0.5 text-[10px] font-medium text-slate-600 dark:text-slate-300">
+                            2FA verified
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-muted-foreground">
+                        {session.ipAddress && (
+                          <span className="inline-flex items-center gap-1 font-mono">
+                            <Globe className="h-3 w-3 shrink-0" />
+                            {session.ipAddress}
+                          </span>
+                        )}
+                        {session.location && (
+                          <span className="inline-flex items-center gap-1">
+                            <MapPin className="h-3 w-3 shrink-0" />
+                            {session.location}
+                          </span>
+                        )}
+                        <span className="tabular-nums">Last active {formatActivityDate(session.lastSeenAt)}</span>
+                      </div>
+                    </div>
+                  </div>
+                  {!session.current && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="w-full shrink-0 rounded-md text-xs sm:w-auto"
+                      disabled={revokeSingleSessionMutation.isPending}
+                      onClick={() => {
+                        setSessionsFeedback(null);
+                        revokeSingleSessionMutation.mutate(session.sessionPrefix);
+                      }}
+                    >
+                      Sign out
+                    </Button>
+                  )}
+                </div>
+              );
+            })
+          ) : (
+            <div className="px-5 py-5 sm:px-6">
               <div className="flex items-center gap-2">
                 <span className="h-2 w-2 rounded-full bg-emerald-600 dark:bg-emerald-400" aria-hidden="true" />
                 <p className="text-sm font-medium text-slate-900 dark:text-foreground">Current portal session</p>
@@ -464,30 +594,14 @@ export function SecuritySettings() {
                 Protected by automatic inactivity lock and encrypted session cookies.
               </p>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="w-full shrink-0 gap-2 rounded-md sm:w-auto"
-              data-testid="security-revoke-other-sessions"
-              disabled={revokeSessionsMutation.isPending}
-              onClick={() => {
-                setSessionsFeedback(null);
-                revokeSessionsMutation.mutate();
-              }}
-            >
-              {revokeSessionsMutation.isPending ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <LogOut className="h-3.5 w-3.5" />
-              )}
-              Sign out other sessions
-            </Button>
-          </div>
-          {sessionsFeedback && (
+          )}
+        </div>
+
+        {sessionsFeedback && (
+          <div className="border-t border-slate-100 dark:border-border px-5 py-3 sm:px-6">
             <p
               role={sessionsFeedback.type === "error" ? "alert" : "status"}
-              className={`mt-3 flex items-center gap-2 text-xs font-medium ${
+              className={`flex items-center gap-2 text-xs font-medium ${
                 sessionsFeedback.type === "error" ? "text-destructive" : "text-emerald-700 dark:text-emerald-400"
               }`}
             >
@@ -498,8 +612,8 @@ export function SecuritySettings() {
               )}
               {sessionsFeedback.message}
             </p>
-          )}
-        </div>
+          </div>
+        )}
       </section>
 
       {/* ── Security Audit Log Card ─────────────────────────────────────── */}
@@ -512,7 +626,7 @@ export function SecuritySettings() {
             <div>
               <h2 className="text-sm font-semibold text-slate-900 dark:text-foreground">Recent Security Activity</h2>
               <p className="mt-0.5 text-xs text-slate-500 dark:text-muted-foreground">
-                Verified sign-ins and security configuration events on your account.
+                Verified sign-ins, device locations, and security configuration events on your account.
               </p>
             </div>
           </div>
@@ -531,17 +645,43 @@ export function SecuritySettings() {
               </Button>
             </div>
           ) : activityQuery.data && activityQuery.data.length > 0 ? (
-            activityQuery.data.map((item) => (
-              <div
-                key={item.id}
-                className="flex flex-col gap-1 px-5 py-3.5 text-sm sm:flex-row sm:items-center sm:justify-between sm:px-6"
-              >
-                <span className="font-medium text-slate-800 dark:text-foreground text-xs sm:text-sm">{item.label}</span>
-                <span className="font-mono text-xs text-slate-500 dark:text-muted-foreground">
-                  {formatActivityDate(item.createdAt)}
-                </span>
-              </div>
-            ))
+            activityQuery.data.map((item) => {
+              const isAlert = item.outcome === "failed" || item.outcome === "denied";
+              return (
+                <div
+                  key={item.id}
+                  className="flex flex-col gap-1.5 px-5 py-3.5 text-sm sm:flex-row sm:items-start sm:justify-between sm:px-6"
+                >
+                  <div className="min-w-0 space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium text-slate-800 dark:text-foreground text-xs sm:text-sm">
+                        {item.label}
+                      </span>
+                      {isAlert && (
+                        <span className="inline-flex items-center rounded-md border border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/40 px-1.5 py-0.5 text-[10px] font-medium uppercase text-rose-700 dark:text-rose-300">
+                          {item.outcome}
+                        </span>
+                      )}
+                      {item.actorLabel && item.actorType && item.actorType !== "client" && (
+                        <span className="inline-flex items-center rounded-md border border-slate-200 dark:border-border bg-slate-50 dark:bg-muted px-1.5 py-0.5 text-[10px] font-medium text-slate-600 dark:text-slate-300">
+                          By {item.actorLabel}
+                        </span>
+                      )}
+                    </div>
+                    {(item.deviceSummary || item.ipAddress || item.location) && (
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-slate-500 dark:text-muted-foreground">
+                        {item.deviceSummary && <span>{item.deviceSummary}</span>}
+                        {item.ipAddress && <span className="font-mono">{item.ipAddress}</span>}
+                        {item.location && <span>{item.location}</span>}
+                      </div>
+                    )}
+                  </div>
+                  <span className="shrink-0 font-mono text-xs tabular-nums text-slate-500 dark:text-muted-foreground">
+                    {formatActivityDate(item.createdAt)}
+                  </span>
+                </div>
+              );
+            })
           ) : (
             <p className="px-5 py-6 text-center text-xs text-slate-500 dark:text-muted-foreground sm:px-6">
               No recent security events recorded.

@@ -9,7 +9,7 @@ import { hasDatabaseConfig, pool } from "./db";
 import { storage } from "./storage";
 import { User } from "@shared/schema";
 import { comparePasswords, hashPassword } from "./security/crypto";
-import { getSecurity } from "./security/store";
+import { audit, getSecurity, isClientSessionRevoked, touchClientActiveSession } from "./security/store";
 import { destroySession } from "./security/session";
 
 const PgSession = connectPg(session);
@@ -68,10 +68,25 @@ export function setupAuth(app: Express) {
         ["/api/login", "/api/logout"].includes(req.path) || req.path.startsWith("/api/admin/")) return next();
     try {
       const user = req.user as User;
-      const security = await getSecurity(user.id);
+      const [security, sessionRevoked] = await Promise.all([
+        getSecurity(user.id),
+        isClientSessionRevoked(req.sessionID),
+      ]);
       const expired = req.session.lastActivity && Date.now() - req.session.lastActivity > INACTIVITY_LIMIT_MS;
-      if ((req.session.authVersion ?? 0) !== security.version ||
+      if (sessionRevoked ||
+          (req.session.authVersion ?? 0) !== security.version ||
           (security.mfa_enabled && req.session.mfaVerified !== true) || expired) {
+        if (expired && !sessionRevoked) {
+          await audit(pool, user.id, "session_expired_inactivity", {
+            req,
+            category: "session",
+            outcome: "denied",
+            severity: "info",
+            actorType: "system",
+            actorLabel: user.clientRef || user.name,
+            targetClientRef: user.clientRef ?? null,
+          });
+        }
         await destroySession(req);
         return void res.status(401).json({ message: "Please sign in again." });
       }
@@ -79,7 +94,10 @@ export function setupAuth(app: Express) {
       // In particular, the profile and access-status endpoints must still let
       // an already signed-in client see the normal account-on-hold screen.
       // Check expiry before updating activity, never after a background poll.
-      if (!isPollingRequest(req)) req.session.lastActivity = Date.now();
+      if (!isPollingRequest(req)) {
+        req.session.lastActivity = Date.now();
+        void touchClientActiveSession(req, user.id, Boolean(req.session.mfaVerified));
+      }
       next();
     } catch {
       res.status(503).json({ message: "We couldn’t verify your session. Please try again." });

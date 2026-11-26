@@ -55,7 +55,12 @@ export async function registerClientSettings(app: Express, authenticated: Reques
         await db.query(`INSERT INTO client_contact_details(user_id,residential_address,mailing_address)
           VALUES($1,$2,$3) ON CONFLICT(user_id) DO UPDATE SET residential_address=$2,mailing_address=$3,updated_at=NOW()`,
           [userId, input.residentialAddress, input.mailingAddress]);
-        await audit(db, userId, "contact_details_updated");
+        await audit(db, userId, "contact_details_updated", {
+          req,
+          category: "kyc_profile",
+          actorType: "client",
+          metadata: { emailUpdated: true, residentialCountry: input.residentialAddress?.country ?? null },
+        });
       });
     } catch (error) {
       if ((error as {code?: string}).code === "23505") throw new SecurityError(409, "This email address is already in use.");
@@ -100,7 +105,17 @@ export async function registerClientSettings(app: Express, authenticated: Reques
            updated_at=NOW()`,
         [userId, input.statementDelivery, input.transactionAlerts, input.loginAlerts, input.sessionTimeoutMinutes],
       );
-      await audit(db, userId, "banking_preferences_updated");
+      await audit(db, userId, "banking_preferences_updated", {
+        req,
+        category: "kyc_profile",
+        actorType: "client",
+        metadata: {
+          statementDelivery: input.statementDelivery,
+          transactionAlerts: input.transactionAlerts,
+          loginAlerts: input.loginAlerts,
+          sessionTimeoutMinutes: input.sessionTimeoutMinutes,
+        },
+      });
     });
     res.json(input);
   }));

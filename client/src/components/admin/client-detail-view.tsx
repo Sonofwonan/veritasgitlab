@@ -7,8 +7,11 @@ import {
   Copy,
   CreditCard,
   FileText,
+  Globe,
   KeyRound,
+  Laptop,
   Lock,
+  MapPin,
   Megaphone,
   PencilLine,
   Plus,
@@ -16,7 +19,9 @@ import {
   ShieldAlert,
   ShieldCheck,
   Sliders,
+  Smartphone,
   Snowflake,
+  Tablet,
   Trash2,
   TrendingUp,
   Unlock,
@@ -52,6 +57,7 @@ import {
   type NoticeSeverity,
 } from "@shared/client-controls";
 import { DEFAULT_BANKING_PREFERENCES, type BankingPreferences } from "@shared/client-settings";
+import type { ClientSessionItem } from "@shared/security";
 import { adminFetch, StatusLabel } from "./admin-status";
 
 export type ResetLinkResult = {
@@ -61,6 +67,24 @@ export type ResetLinkResult = {
   clientRef: string | null;
   resetUrl: string;
   expiresAt: string;
+};
+
+type ClientSecurityEventItem = {
+  id: number;
+  event: string;
+  category?: string;
+  outcome?: string;
+  actorType?: string;
+  actorLabel?: string | null;
+  ipAddress?: string | null;
+  location?: string | null;
+  deviceSummary?: string | null;
+  browser?: string | null;
+  os?: string | null;
+  deviceType?: string | null;
+  sessionPrefix?: string | null;
+  metadata?: Record<string, unknown> | null;
+  createdAt: string;
 };
 
 type ClientDetailsResponse = {
@@ -79,7 +103,8 @@ type ClientDetailsResponse = {
   security: {
     mfaEnabled: boolean;
     version: number;
-    events: Array<{ id: number; event: string; createdAt: string }>;
+    events: ClientSecurityEventItem[];
+    sessions?: ClientSessionItem[];
     recoveryRequests: Array<{ id: number; status: string; createdAt: string; reviewedAt: string | null }>;
     setupTokens: Array<{
       id: number;
@@ -401,6 +426,22 @@ export function ClientDetailView({
     onSuccess: () => {
       invalidateAll();
       toast({ title: "Sessions Revoked", description: "All active client sessions have been terminated." });
+    },
+    onError: (err: any) => toast({ title: "Failed", description: err.message, variant: "destructive" }),
+  });
+
+  const revokeSingleSessionMutation = useMutation({
+    mutationFn: async (prefix: string) => {
+      const res = await adminFetch(`/api/admin/users/${userId}/sessions/${encodeURIComponent(prefix)}/revoke`, adminKey, {
+        method: "POST",
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.message || "Failed to revoke device session");
+      return body;
+    },
+    onSuccess: () => {
+      invalidateAll();
+      toast({ title: "Device Session Terminated", description: "Selected client session has been signed out." });
     },
     onError: (err: any) => toast({ title: "Failed", description: err.message, variant: "destructive" }),
   });
@@ -1485,54 +1526,179 @@ export function ClientDetailView({
       {/* ── TAB: SECURITY & ACCESS ──────────────────────────────────────────── */}
       {activeTab === "security" && (
         <div className="grid gap-5 lg:grid-cols-2">
-          <section className="rounded-lg border border-slate-800 bg-[#0E1623] p-5 space-y-4">
-            <h3 className="text-sm font-semibold text-white">Administrative Security Controls</h3>
-            <p className="text-xs text-slate-400">
-              Current posture: {security.mfaEnabled ? "Authenticator 2FA Active" : "Password Only"} · Security Version {security.version}
-            </p>
-            <div className="grid gap-2.5">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => resetLinkMutation.mutate()}
-                disabled={resetLinkMutation.isPending}
-                className="justify-start border-slate-700 bg-slate-900/60 text-slate-200 text-xs gap-2"
-              >
-                <KeyRound className="w-3.5 h-3.5 text-emerald-400" /> Issue One-Time Password Reset Link
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => revokeSessionsMutation.mutate()}
-                disabled={revokeSessionsMutation.isPending}
-                className="justify-start border-slate-700 bg-slate-900/60 text-slate-200 text-xs gap-2"
-              >
-                <Lock className="w-3.5 h-3.5 text-amber-400" /> Terminate All Active Client Sessions
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => disable2faMutation.mutate()}
-                disabled={disable2faMutation.isPending || !security.mfaEnabled}
-                className="justify-start border-rose-500/30 bg-rose-950/20 text-rose-300 hover:bg-rose-950/40 text-xs gap-2"
-              >
-                <ShieldAlert className="w-3.5 h-3.5" /> Force Disable Authenticator 2FA &amp; Clear Recovery Codes
-              </Button>
-            </div>
-          </section>
+          <div className="space-y-5">
+            <section className="rounded-lg border border-slate-800 bg-[#0E1623] p-5 space-y-4">
+              <h3 className="text-sm font-semibold text-white">Administrative Security Controls</h3>
+              <p className="text-xs text-slate-400">
+                Current posture: {security.mfaEnabled ? "Authenticator 2FA Active" : "Password Only"} · Security Version {security.version}
+              </p>
+              <div className="grid gap-2.5">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => resetLinkMutation.mutate()}
+                  disabled={resetLinkMutation.isPending}
+                  className="justify-start border-slate-700 bg-slate-900/60 text-slate-200 text-xs gap-2"
+                >
+                  <KeyRound className="w-3.5 h-3.5 text-emerald-400" /> Issue One-Time Password Reset Link
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => revokeSessionsMutation.mutate()}
+                  disabled={revokeSessionsMutation.isPending}
+                  className="justify-start border-slate-700 bg-slate-900/60 text-slate-200 text-xs gap-2"
+                >
+                  <Lock className="w-3.5 h-3.5 text-amber-400" /> Terminate All Active Client Sessions
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => disable2faMutation.mutate()}
+                  disabled={disable2faMutation.isPending || !security.mfaEnabled}
+                  className="justify-start border-rose-500/30 bg-rose-950/20 text-rose-300 hover:bg-rose-950/40 text-xs gap-2"
+                >
+                  <ShieldAlert className="w-3.5 h-3.5" /> Force Disable Authenticator 2FA &amp; Clear Recovery Codes
+                </Button>
+              </div>
+            </section>
+
+            <section className="rounded-lg border border-slate-800 bg-[#0E1623] p-5 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold text-white">
+                  Active Client Devices &amp; Sessions ({security.sessions?.length ?? 0})
+                </h3>
+                <span className="text-[11px] font-mono text-slate-400">Live Tracking</span>
+              </div>
+              <div className="divide-y divide-slate-800/70 text-xs max-h-80 overflow-y-auto">
+                {!security.sessions || security.sessions.length === 0 ? (
+                  <p className="py-4 text-slate-500 text-center">No active browser sessions recorded.</p>
+                ) : (
+                  security.sessions.map((s) => {
+                    const dt = (s.deviceType || "").toLowerCase();
+                    const DeviceIcon =
+                      dt === "mobile"
+                        ? Smartphone
+                        : dt === "tablet"
+                          ? Tablet
+                          : Laptop;
+                    return (
+                      <div key={s.sessionPrefix} className="py-3 flex items-start justify-between gap-3">
+                        <div className="flex items-start gap-2.5 min-w-0">
+                          <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-slate-900 border border-slate-800 text-slate-300">
+                            <DeviceIcon className="w-3.5 h-3.5" />
+                          </div>
+                          <div className="min-w-0 space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-medium text-white">
+                                {s.deviceSummary || `${s.browser} on ${s.os}`}
+                              </span>
+                              <StatusLabel tone={s.mfaVerified ? "emerald" : "neutral"}>
+                                {s.mfaVerified ? "MFA Verified" : "Password Session"}
+                              </StatusLabel>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-slate-400">
+                              {s.ipAddress && (
+                                <span className="inline-flex items-center gap-1 font-mono">
+                                  <Globe className="w-3 h-3 text-slate-500" />
+                                  {s.ipAddress}
+                                </span>
+                              )}
+                              {s.location && (
+                                <span className="inline-flex items-center gap-1">
+                                  <MapPin className="w-3 h-3 text-slate-500" />
+                                  {s.location}
+                                </span>
+                              )}
+                              <span className="font-mono text-slate-500">#{s.sessionPrefix}</span>
+                            </div>
+                            <p className="text-[11px] text-slate-500 font-mono tabular-nums">
+                              Last seen {new Date(s.lastSeenAt).toLocaleString()} · Expires{" "}
+                              {new Date(s.expiresAt).toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={revokeSingleSessionMutation.isPending}
+                          onClick={() => revokeSingleSessionMutation.mutate(s.sessionPrefix)}
+                          className="h-7 shrink-0 border-rose-500/30 bg-rose-950/20 text-rose-300 hover:bg-rose-950/40 text-[11px] px-2.5"
+                        >
+                          Revoke
+                        </Button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </section>
+          </div>
 
           <section className="rounded-lg border border-slate-800 bg-[#0E1623] p-5 space-y-3">
-            <h3 className="text-sm font-semibold text-white">Security Audit Events ({security.events.length})</h3>
-            <div className="divide-y divide-slate-800/70 text-xs max-h-72 overflow-y-auto">
+            <h3 className="text-sm font-semibold text-white">
+              Security &amp; Compliance Events ({security.events.length})
+            </h3>
+            <div className="divide-y divide-slate-800/70 text-xs max-h-[34rem] overflow-y-auto">
               {security.events.length === 0 ? (
                 <p className="py-4 text-slate-500 text-center">No recent security events logged.</p>
               ) : (
-                security.events.map((ev) => (
-                  <div key={ev.id} className="py-2 flex justify-between gap-3">
-                    <span className="font-mono text-slate-200">{ev.event}</span>
-                    <span className="font-mono text-slate-400">{new Date(ev.createdAt).toLocaleString()}</span>
-                  </div>
-                ))
+                security.events.map((ev) => {
+                  const outcomeTone =
+                    ev.outcome === "failed" || ev.outcome === "denied"
+                      ? "red"
+                      : ev.outcome === "pending_review"
+                        ? "amber"
+                        : "emerald";
+                  const metaEntries = ev.metadata && typeof ev.metadata === "object"
+                    ? Object.entries(ev.metadata).filter(([, v]) => v !== null && v !== undefined && v !== "")
+                    : [];
+                  return (
+                    <div key={ev.id} className="py-3 space-y-1.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-mono text-slate-100 font-medium">{ev.event}</span>
+                          {ev.outcome && (
+                            <StatusLabel tone={outcomeTone}>{ev.outcome}</StatusLabel>
+                          )}
+                          {ev.category && (
+                            <span className="rounded bg-slate-900 border border-slate-800 px-1.5 py-0.5 text-[10px] font-mono text-slate-400">
+                              {ev.category}
+                            </span>
+                          )}
+                        </div>
+                        <span className="font-mono text-[11px] tabular-nums text-slate-400">
+                          {new Date(ev.createdAt).toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-slate-400">
+                        {ev.actorType && (
+                          <span>
+                            Actor:{" "}
+                            <span className="text-slate-200">
+                              {ev.actorLabel ? `${ev.actorLabel} (${ev.actorType})` : ev.actorType}
+                            </span>
+                          </span>
+                        )}
+                        {ev.deviceSummary && <span>Device: {ev.deviceSummary}</span>}
+                        {ev.ipAddress && <span className="font-mono">IP: {ev.ipAddress}</span>}
+                        {ev.location && <span>Loc: {ev.location}</span>}
+                      </div>
+                      {metaEntries.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 pt-0.5">
+                          {metaEntries.slice(0, 6).map(([key, val]) => (
+                            <span
+                              key={key}
+                              className="rounded border border-slate-800 bg-slate-950/70 px-1.5 py-0.5 font-mono text-[10px] text-slate-400"
+                            >
+                              {key}: {typeof val === "object" ? JSON.stringify(val) : String(val)}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
               )}
             </div>
           </section>

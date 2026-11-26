@@ -2,6 +2,7 @@ import type { Express, RequestHandler } from "express";
 import type { Pool, PoolClient } from "pg";
 import { z } from "zod";
 import { hasDatabaseConfig } from "./db";
+import { recordComplianceAudit } from "./security/store";
 import { adminRecoveryRequestPath } from "@shared/client-settings";
 import { deleteMemoryAuditEntry, deleteMemoryPostingRequest } from "./admin-ledger";
 
@@ -196,12 +197,25 @@ export function registerAdminDeleteRoutes(
         await client.query(`DELETE FROM client_display_currency_audit WHERE user_id = $1`, [userId]);
         await client.query(`DELETE FROM client_recovery_requests WHERE user_id = $1`, [userId]);
         await client.query(`DELETE FROM client_security_recovery WHERE user_id = $1`, [userId]);
+        await client.query(`DELETE FROM client_active_sessions WHERE user_id = $1`, [userId]);
         await client.query(`DELETE FROM client_security_events WHERE user_id = $1`, [userId]);
         await client.query(`DELETE FROM client_security WHERE user_id = $1`, [userId]);
         await client.query(`DELETE FROM client_contact_details WHERE user_id = $1`, [userId]);
         await client.query(`DELETE FROM account_opening_requests WHERE user_id = $1`, [userId]);
         await client.query(`DELETE FROM accounts WHERE user_id = $1`, [userId]);
         await client.query(`DELETE FROM users WHERE id = $1`, [userId]);
+
+        await recordComplianceAudit({
+          req,
+          category: "admin_action",
+          action: "admin_user_deleted",
+          severity: "critical",
+          actorType: "admin",
+          actorId: req.adminStaff ? String(req.adminStaff.id) : null,
+          actorLabel: req.adminStaff ? `${req.adminStaff.displayName} (@${req.adminStaff.username})` : "Admin Key",
+          targetUserId: userId,
+          metadata: { deletedName: user.name },
+        });
 
         return { ok: true, id: userId, deletedName: user.name };
       });

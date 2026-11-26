@@ -33,7 +33,12 @@ export async function registerRecoveryRequests(app: Express, authenticated: Requ
       const { rows: [row] } = await db.query(`INSERT INTO client_recovery_requests(user_id) VALUES($1)
         ON CONFLICT(user_id) WHERE status='pending' DO UPDATE SET user_id=EXCLUDED.user_id
         RETURNING id,status,created_at AS "createdAt",reviewed_at AS "reviewedAt"`, [userId]);
-      await audit(db, userId, "recovery_codes_requested");
+      await audit(db, userId, "recovery_codes_requested", {
+        req,
+        category: "mfa",
+        severity: "warning",
+        actorType: "client",
+      });
       return row;
     });
     res.status(202).json(request);
@@ -71,7 +76,19 @@ export async function registerRecoveryRequests(app: Express, authenticated: Requ
         await revokeSessions(db, request.user_id);
       }
       await db.query("UPDATE client_recovery_requests SET status=$2,reviewed_at=NOW() WHERE id=$1", [id, action === "issue" ? "issued" : "rejected"]);
-      await audit(db, request.user_id, action === "issue" ? "admin_recovery_codes_issued_identity_verified" : "admin_recovery_request_rejected");
+      await audit(
+        db,
+        request.user_id,
+        action === "issue" ? "admin_recovery_codes_issued_identity_verified" : "admin_recovery_request_rejected",
+        {
+          req,
+          category: "mfa",
+          severity: action === "issue" ? "warning" : "info",
+          actorType: "admin",
+          actorLabel: req.adminStaff ? `${req.adminStaff.displayName} (@${req.adminStaff.username})` : "Admin Key",
+          metadata: { requestId: id, identityVerified: input.identityVerified },
+        },
+      );
     });
     res.json(action === "issue" ? { recoveryCodes: codes } : { ok: true });
   }));
